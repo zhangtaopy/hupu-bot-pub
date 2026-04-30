@@ -762,3 +762,386 @@ pub fn detailed_analysis(replies: &[ReplyRow]) -> DetailedAnalysis {
         reply_length_buckets: buckets,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_reply(content: &str, pid: i64, tid: i64) -> ReplyRow {
+        ReplyRow {
+            pid,
+            tid,
+            puid: None,
+            euid: Some("test_user".into()),
+            username: "测试用户".into(),
+            content: content.into(),
+            quote: 0,
+            quote_pid: None,
+            quote_tid: None,
+            quote_puid: None,
+            quote_euid: None,
+            quote_username: None,
+            quote_content: None,
+            quote_create_time: None,
+            create_time: chrono::Utc::now().timestamp(),
+            light_count: 0,
+            unlight_count: 0,
+            title: format!("帖子标题_{}", tid),
+            topic_id: Some(1),
+            topic_name: Some("步行街".into()),
+            format_time: Some("03-15 12:00".into()),
+        }
+    }
+
+    fn make_reply_with_quote(content: &str, pid: i64, tid: i64, has_quote: bool) -> ReplyRow {
+        let mut r = make_reply(content, pid, tid);
+        if has_quote {
+            r.quote = 1;
+            r.quote_username = Some("引用用户".into());
+            r.quote_content = Some("这是被引用的内容".into());
+        }
+        r
+    }
+
+    fn make_reply_with_topic(content: &str, pid: i64, tid: i64, topic: &str) -> ReplyRow {
+        let mut r = make_reply(content, pid, tid);
+        r.topic_name = Some(topic.into());
+        r
+    }
+
+    #[test]
+    fn normalize_strips_html_and_punct() {
+        let result = normalize("<p>你好！世界？</p>");
+        assert!(!result.contains('<'));
+        assert!(!result.contains('！'));
+        assert!(!result.contains('？'));
+    }
+
+    #[test]
+    fn normalize_lowercases() {
+        let result = normalize("Hello World");
+        assert_eq!(result, "helloworld");
+    }
+
+    #[test]
+    fn normalize_removes_whitespace() {
+        assert_eq!(normalize("hello  world"), "helloworld");
+    }
+
+    #[test]
+    fn normalize_empty_input() {
+        assert_eq!(normalize(""), "");
+    }
+
+    #[test]
+    fn normalize_chinese_text() {
+        let r1 = normalize("你好世界");
+        let r2 = normalize("你好！世界");
+        assert_eq!(r1, r2);
+    }
+
+    #[test]
+    fn tokenize_chinese_bigrams() {
+        let tokens = tokenize("你好世界");
+        assert!(tokens.contains("你好"));
+        assert!(tokens.contains("好世"));
+        assert!(tokens.contains("世界"));
+    }
+
+    #[test]
+    fn tokenize_english_words() {
+        let tokens = tokenize("hello world test");
+        assert!(tokens.contains("hello"));
+        assert!(tokens.contains("world"));
+        assert!(tokens.contains("test"));
+        assert_eq!(tokens.len(), 3);
+    }
+
+    #[test]
+    fn tokenize_mixed_chinese_and_english() {
+        let tokens = tokenize("中国china日本");
+        assert!(tokens.contains("china"));
+        assert!(tokens.contains("中国"));
+        assert!(tokens.contains("日本"));
+    }
+
+    #[test]
+    fn tokenize_english_case_insensitive() {
+        let tokens = tokenize("Hello WORLD");
+        assert!(tokens.contains("hello"));
+        assert!(tokens.contains("world"));
+    }
+
+    #[test]
+    fn tokenize_empty() {
+        let tokens = tokenize("");
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn jaccard_identical_sets() {
+        let a: HashSet<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        let b = a.clone();
+        assert!((jaccard_similarity(&a, &b) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn jaccard_disjoint_sets() {
+        let a: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
+        let b: HashSet<String> = ["y"].iter().map(|s| s.to_string()).collect();
+        assert!((jaccard_similarity(&a, &b) - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn jaccard_partial_overlap() {
+        let a: HashSet<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
+        let b: HashSet<String> = ["b", "c"].iter().map(|s| s.to_string()).collect();
+        let sim = jaccard_similarity(&a, &b);
+        assert!((sim - 1.0 / 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn jaccard_both_empty() {
+        let a: HashSet<String> = HashSet::new();
+        let b: HashSet<String> = HashSet::new();
+        assert_eq!(jaccard_similarity(&a, &b), 0.0);
+    }
+
+    #[test]
+    fn uf_initial_state() {
+        let mut uf = UnionFind::new(5);
+        for i in 0..5 {
+            assert_eq!(uf.find(i), i);
+        }
+    }
+
+    #[test]
+    fn uf_union_two() {
+        let mut uf = UnionFind::new(5);
+        uf.union(0, 1);
+        assert_eq!(uf.find(0), uf.find(1));
+    }
+
+    #[test]
+    fn uf_transitive_union() {
+        let mut uf = UnionFind::new(5);
+        uf.union(0, 1);
+        uf.union(1, 2);
+        assert_eq!(uf.find(0), uf.find(2));
+    }
+
+    #[test]
+    fn uf_no_false_union() {
+        let mut uf = UnionFind::new(5);
+        uf.union(0, 1);
+        uf.union(2, 3);
+        assert_ne!(uf.find(0), uf.find(2));
+    }
+
+    #[test]
+    fn cluster_empty_input() {
+        let groups = cluster_replies(&[], 0.5);
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn cluster_exact_duplicates_grouped() {
+        let replies = vec![
+            make_reply("完全一样的回帖", 1, 100),
+            make_reply("完全一样的回帖", 2, 200),
+            make_reply("完全一样的回帖", 3, 300),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].count, 3);
+        assert!(matches!(groups[0].similarity, GroupSimilarity::Exact));
+    }
+
+    #[test]
+    fn cluster_exact_with_html_diffs() {
+        let replies = vec![
+            make_reply("<p>你好世界</p>", 1, 100),
+            make_reply("你好世界", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].count, 2);
+        assert!(matches!(groups[0].similarity, GroupSimilarity::Exact));
+    }
+
+    #[test]
+    fn cluster_highly_similar_grouped() {
+        let replies = vec![
+            make_reply("詹姆斯今天表现非常出色，全场得到30分", 1, 100),
+            make_reply("詹姆斯今天表现十分出色，全场得到31分", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.3);
+        assert_eq!(groups.len(), 1);
+    }
+
+    #[test]
+    fn cluster_dissimilar_not_grouped() {
+        let replies = vec![
+            make_reply("詹姆斯今天表现非常出色", 1, 100),
+            make_reply("今天天气真不错适合打球", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn cluster_high_threshold_dissimilar_not_grouped() {
+        let replies = vec![
+            make_reply("詹姆斯今天表现非常出色，全场得到30分", 1, 100),
+            make_reply("詹姆斯今天表现十分出色，全场得到31分", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.99);
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn cluster_multiple_groups() {
+        let replies = vec![
+            make_reply("A组内容AAAA", 1, 100),
+            make_reply("A组内容AAAA", 2, 200),
+            make_reply("B组内容BBBB", 3, 300),
+            make_reply("B组内容BBBB", 4, 400),
+            make_reply("独立内容CCCC", 5, 500),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert_eq!(groups.len(), 2);
+        let total_in_groups: usize = groups.iter().map(|g| g.count).sum();
+        assert_eq!(total_in_groups, 4);
+    }
+
+    #[test]
+    fn cluster_groups_contain_group_id() {
+        let replies = vec![
+            make_reply("重复回帖", 1, 100),
+            make_reply("重复回帖", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert!(groups[0].group_id > 0);
+    }
+
+    #[test]
+    fn cluster_groups_have_representative() {
+        let replies = vec![
+            make_reply("代表性回帖内容", 1, 100),
+            make_reply("代表性回帖内容", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert!(!groups[0].representative.is_empty());
+    }
+
+    #[test]
+    fn cluster_groups_have_topic_distribution() {
+        let replies = vec![
+            make_reply_with_topic("重复回帖", 1, 100, "步行街"),
+            make_reply_with_topic("重复回帖", 2, 200, "步行街"),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert!(groups[0].topic_distribution.contains_key("步行街"));
+    }
+
+    #[test]
+    fn cluster_groups_have_reply_urls() {
+        let replies = vec![
+            make_reply("重复回帖", 1, 100),
+            make_reply("重复回帖", 2, 200),
+        ];
+        let groups = cluster_replies(&replies, 0.8);
+        assert_eq!(groups[0].replies.len(), 2);
+        assert!(groups[0].replies[0].reply_url.contains("hupu.com"));
+        assert!(groups[0].replies[0].reply_url.contains("pid="));
+    }
+
+    #[test]
+    fn detailed_analysis_empty_input() {
+        let result = detailed_analysis(&[]);
+        assert_eq!(result.length_stats.avg, 0.0);
+        assert_eq!(result.length_stats.min, 0);
+        assert_eq!(result.length_stats.max, 0);
+        assert_eq!(result.length_stats.median, 0);
+        assert_eq!(result.total_quotes, 0);
+        assert_eq!(result.quote_rate, 0.0);
+    }
+
+    #[test]
+    fn detailed_analysis_length_stats() {
+        let replies = vec![
+            make_reply("1234567890", 1, 100),
+            make_reply("12", 2, 200),
+            make_reply("12345", 3, 300),
+        ];
+        let result = detailed_analysis(&replies);
+        assert!((result.length_stats.avg - 17.0 / 3.0).abs() < 0.01);
+        assert_eq!(result.length_stats.min, 2);
+        assert_eq!(result.length_stats.max, 10);
+    }
+
+    #[test]
+    fn detailed_analysis_quote_stats() {
+        let replies = vec![
+            make_reply_with_quote("a", 1, 100, true),
+            make_reply_with_quote("b", 2, 200, true),
+            make_reply_with_quote("c", 3, 300, false),
+        ];
+        let result = detailed_analysis(&replies);
+        assert_eq!(result.total_quotes, 2);
+        assert!((result.quote_rate - 2.0 / 3.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn detailed_analysis_light_stats() {
+        let mut r1 = make_reply("a", 1, 100);
+        r1.light_count = 5;
+        let mut r2 = make_reply("b", 2, 200);
+        r2.light_count = 10;
+        let mut r3 = make_reply("c", 3, 300);
+        r3.light_count = 0;
+
+        let result = detailed_analysis(&[r1, r2, r3]);
+        assert_eq!(result.light_stats.total_lights, 15);
+        assert_eq!(result.light_stats.max_lights, 10);
+        assert_eq!(result.light_stats.replied_count, 2);
+        assert!((result.light_stats.avg_lights - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn detailed_analysis_hour_distribution() {
+        let mut r = make_reply("test", 1, 100);
+        let t = chrono::Utc::now().timestamp();
+        let t_8am = t - (t % 86400) + 8 * 3600;
+        r.create_time = t_8am;
+
+        let result = detailed_analysis(&[r]);
+        assert!(result.hour_distribution.iter().sum::<usize>() > 0);
+    }
+
+    #[test]
+    fn detailed_analysis_length_buckets() {
+        let replies = vec![
+            make_reply(&"x".repeat(5), 1, 100),
+            make_reply(&"x".repeat(30), 2, 200),
+            make_reply(&"x".repeat(80), 3, 300),
+            make_reply(&"x".repeat(150), 4, 400),
+            make_reply(&"x".repeat(300), 5, 500),
+        ];
+        let result = detailed_analysis(&replies);
+        assert_eq!(result.reply_length_buckets.len(), 5);
+        assert_eq!(result.reply_length_buckets.iter().sum::<usize>(), 5);
+    }
+
+    #[test]
+    fn detailed_analysis_top_posts() {
+        let replies = vec![
+            make_reply("a", 1, 100),
+            make_reply("b", 2, 100),
+            make_reply("c", 3, 200),
+        ];
+        let result = detailed_analysis(&replies);
+        assert_eq!(result.top_replied_posts[0].tid, 100);
+        assert_eq!(result.top_replied_posts[0].count, 2);
+    }
+}

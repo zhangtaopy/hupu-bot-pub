@@ -433,3 +433,421 @@ pub fn save_batch_error(
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn in_memory_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+        create_tables(&conn).unwrap();
+        conn
+    }
+
+    fn sample_reply(pid: i64, tid: i64) -> ReplyRow {
+        ReplyRow {
+            pid,
+            tid,
+            puid: Some(1000),
+            euid: Some("test_euid".into()),
+            username: "测试用户".into(),
+            content: "这是一条测试回帖".into(),
+            quote: 0,
+            quote_pid: None,
+            quote_tid: None,
+            quote_puid: None,
+            quote_euid: None,
+            quote_username: None,
+            quote_content: None,
+            quote_create_time: None,
+            create_time: 1700000000,
+            light_count: 5,
+            unlight_count: 1,
+            title: "测试帖子标题".into(),
+            topic_id: Some(1),
+            topic_name: Some("步行街".into()),
+            format_time: Some("01-01 00:00".into()),
+        }
+    }
+
+    fn sample_post(tid: i64) -> PostRow {
+        PostRow {
+            tid,
+            euid: "test_euid".into(),
+            username: "测试用户".into(),
+            title: "测试帖子".into(),
+            summary: "帖子摘要".into(),
+            create_time: 1700000000,
+            lastpost_time: 1700000100,
+            replies: 10,
+            visits: 100,
+            lights: 5,
+            recommend_num: 1,
+            forum_name: "步行街".into(),
+            topic_name: "步行街".into(),
+            topic_id: 1,
+            total_pics: 0,
+            has_video: false,
+            share_num: 0,
+            format_time: Some("2024-01-01 00:00".into()),
+        }
+    }
+
+    // ── open_db / create_tables ──
+
+    #[test]
+    fn open_db_creates_tables() {
+        let conn = in_memory_conn();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='replies'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(count > 0);
+    }
+
+    // ── upsert_replies ──
+
+    #[test]
+    fn upsert_replies_inserts() {
+        let conn = in_memory_conn();
+        let replies = vec![sample_reply(1, 100), sample_reply(2, 200)];
+        let count = upsert_replies(&conn, &replies).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn upsert_replies_overwrites_existing() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[sample_reply(1, 100)]).unwrap();
+
+        let mut updated = sample_reply(1, 100);
+        updated.content = "更新后的内容".into();
+        updated.light_count = 99;
+        upsert_replies(&conn, &[updated]).unwrap();
+
+        let rows = query_replies(&conn, Some("test_euid"), 10, 0).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].content, "更新后的内容");
+        assert_eq!(rows[0].light_count, 99);
+    }
+
+    #[test]
+    fn upsert_replies_empty_slice_ok() {
+        let conn = in_memory_conn();
+        let count = upsert_replies(&conn, &[]).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    // ── query_replies ──
+
+    #[test]
+    fn query_replies_by_euid() {
+        let conn = in_memory_conn();
+        let mut r1 = sample_reply(1, 100);
+        r1.euid = Some("user_a".into());
+        let mut r2 = sample_reply(2, 200);
+        r2.euid = Some("user_b".into());
+        upsert_replies(&conn, &[r1, r2]).unwrap();
+
+        let rows = query_replies(&conn, Some("user_a"), 10, 0).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].pid, 1);
+    }
+
+    #[test]
+    fn query_replies_all_users() {
+        let conn = in_memory_conn();
+        let r1 = sample_reply(1, 100);
+        let r2 = sample_reply(2, 200);
+        upsert_replies(&conn, &[r1, r2]).unwrap();
+
+        let rows = query_replies(&conn, None, 10, 0).unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn query_replies_limit_and_offset() {
+        let conn = in_memory_conn();
+        let replies: Vec<_> = (1..=5).map(|i| sample_reply(i, i * 100)).collect();
+        upsert_replies(&conn, &replies).unwrap();
+
+        let rows = query_replies(&conn, None, 2, 1).unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn query_replies_returns_empty_for_unknown_euid() {
+        let conn = in_memory_conn();
+        let rows = query_replies(&conn, Some("unknown"), 10, 0).unwrap();
+        assert!(rows.is_empty());
+    }
+
+    // ── count_replies ──
+
+    #[test]
+    fn count_replies_total() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[sample_reply(1, 100), sample_reply(2, 200)]).unwrap();
+        assert_eq!(count_replies(&conn, None).unwrap(), 2);
+    }
+
+    #[test]
+    fn count_replies_by_euid() {
+        let conn = in_memory_conn();
+        let mut r = sample_reply(1, 100);
+        r.euid = Some("count_user".into());
+        upsert_replies(&conn, &[r]).unwrap();
+
+        assert_eq!(count_replies(&conn, Some("count_user")).unwrap(), 1);
+        assert_eq!(count_replies(&conn, Some("other")).unwrap(), 0);
+    }
+
+    #[test]
+    fn count_replies_empty_db() {
+        let conn = in_memory_conn();
+        assert_eq!(count_replies(&conn, None).unwrap(), 0);
+    }
+
+    // ── row_to_reply (implicitly tested by query_replies, but explicit too) ──
+
+    #[test]
+    fn query_replies_has_all_fields() {
+        let conn = in_memory_conn();
+        let r = sample_reply(1, 100);
+        upsert_replies(&conn, &[r.clone()]).unwrap();
+
+        let rows = query_replies(&conn, None, 1, 0).unwrap();
+        let row = &rows[0];
+        assert_eq!(row.pid, r.pid);
+        assert_eq!(row.tid, r.tid);
+        assert_eq!(row.content, r.content);
+        assert_eq!(row.light_count, r.light_count);
+        assert_eq!(row.title, r.title);
+    }
+
+    // ── upsert_posts ──
+
+    #[test]
+    fn upsert_posts_inserts() {
+        let conn = in_memory_conn();
+        let posts = vec![sample_post(1), sample_post(2)];
+        let count = upsert_posts(&conn, &posts).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn upsert_posts_overwrites() {
+        let conn = in_memory_conn();
+        upsert_posts(&conn, &[sample_post(1)]).unwrap();
+
+        let mut updated = sample_post(1);
+        updated.title = "更新后的标题".into();
+        upsert_posts(&conn, &[updated]).unwrap();
+
+        let rows = query_posts(&conn, Some("test_euid"), 10, 0).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "更新后的标题");
+    }
+
+    // ── query_posts ──
+
+    #[test]
+    fn query_posts_by_euid() {
+        let conn = in_memory_conn();
+        let mut p1 = sample_post(1);
+        p1.euid = "pa".into();
+        let mut p2 = sample_post(2);
+        p2.euid = "pb".into();
+        upsert_posts(&conn, &[p1, p2]).unwrap();
+
+        let rows = query_posts(&conn, Some("pa"), 10, 0).unwrap();
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn query_posts_limit_offset() {
+        let conn = in_memory_conn();
+        let posts: Vec<_> = (1..=5).map(|i| sample_post(i)).collect();
+        upsert_posts(&conn, &posts).unwrap();
+
+        let rows = query_posts(&conn, None, 3, 0).unwrap();
+        assert_eq!(rows.len(), 3);
+    }
+
+    // ── count_posts ──
+
+    #[test]
+    fn count_posts_works() {
+        let conn = in_memory_conn();
+        upsert_posts(&conn, &[sample_post(1), sample_post(2)]).unwrap();
+        assert_eq!(count_posts(&conn, None).unwrap(), 2);
+    }
+
+    // ── ai_analysis ──
+
+    #[test]
+    fn save_and_get_ai_analysis() {
+        let conn = in_memory_conn();
+        save_ai_analysis(&conn, "user1", r#"{"label":"正常用户"}"#).unwrap();
+        let result = get_ai_analysis(&conn, "user1").unwrap();
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("正常用户"));
+    }
+
+    #[test]
+    fn get_ai_analysis_nonexistent_euid() {
+        let conn = in_memory_conn();
+        let result = get_ai_analysis(&conn, "no_one").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn save_ai_analysis_overwrites() {
+        let conn = in_memory_conn();
+        save_ai_analysis(&conn, "user1", r#"{"v":1}"#).unwrap();
+        save_ai_analysis(&conn, "user1", r#"{"v":2}"#).unwrap();
+        let result = get_ai_analysis(&conn, "user1").unwrap().unwrap();
+        assert!(result.contains("\"v\":2"));
+    }
+
+    // ── ai_post_analysis ──
+
+    #[test]
+    fn save_and_get_ai_post_analysis() {
+        let conn = in_memory_conn();
+        save_ai_post_analysis(&conn, "user1", r#"{"posts":[]}"#).unwrap();
+        let result = get_ai_post_analysis(&conn, "user1").unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn get_ai_post_analysis_nonexistent() {
+        let conn = in_memory_conn();
+        let result = get_ai_post_analysis(&conn, "no_one").unwrap();
+        assert!(result.is_none());
+    }
+
+    // ── similarity_analysis ──
+
+    #[test]
+    fn save_and_get_similarity_analysis() {
+        let conn = in_memory_conn();
+        save_similarity_analysis(&conn, "user1", 0.8, r#"{"groups":[]}"#).unwrap();
+        let result = get_similarity_analysis(&conn, "user1", 0.8).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn similarity_analysis_by_different_thresholds() {
+        let conn = in_memory_conn();
+        save_similarity_analysis(&conn, "user1", 0.5, r#"{"t":0.5}"#).unwrap();
+        save_similarity_analysis(&conn, "user1", 0.9, r#"{"t":0.9}"#).unwrap();
+
+        let r1 = get_similarity_analysis(&conn, "user1", 0.5).unwrap().unwrap();
+        let r2 = get_similarity_analysis(&conn, "user1", 0.9).unwrap().unwrap();
+        assert!(r1.contains("0.5"));
+        assert!(r2.contains("0.9"));
+    }
+
+    // ── get_all_euids ──
+
+    #[test]
+    fn get_all_euids_from_replies_and_posts() {
+        let conn = in_memory_conn();
+        let mut r = sample_reply(1, 100);
+        r.euid = Some("aaa".into());
+        r.username = "用户A".into();
+        upsert_replies(&conn, &[r]).unwrap();
+
+        let mut p = sample_post(1);
+        p.euid = "bbb".into();
+        p.username = "用户B".into();
+        upsert_posts(&conn, &[p]).unwrap();
+
+        let euids = get_all_euids(&conn).unwrap();
+        assert_eq!(euids.len(), 2);
+        let names: Vec<&str> = euids.iter().map(|(_, n)| n.as_str()).collect();
+        assert!(names.contains(&"用户A"));
+        assert!(names.contains(&"用户B"));
+    }
+
+    #[test]
+    fn get_all_euids_deduplicates() {
+        let conn = in_memory_conn();
+        let mut r = sample_reply(1, 100);
+        r.euid = Some("same".into());
+        r.username = "用户X".into();
+        upsert_replies(&conn, &[r]).unwrap();
+
+        let mut p = sample_post(1);
+        p.euid = "same".into();
+        p.username = "用户X".into();
+        upsert_posts(&conn, &[p]).unwrap();
+
+        let euids = get_all_euids(&conn).unwrap();
+        assert_eq!(euids.len(), 1);
+    }
+
+    #[test]
+    fn get_all_euids_empty() {
+        let conn = in_memory_conn();
+        let euids = get_all_euids(&conn).unwrap();
+        assert!(euids.is_empty());
+    }
+
+    // ── save_batch_error ──
+
+    #[test]
+    fn save_batch_error_works() {
+        let conn = in_memory_conn();
+        save_batch_error(&conn, "user1", "reply", 0, "test error", Some("raw")).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM ai_batch_errors", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn save_batch_error_without_raw() {
+        let conn = in_memory_conn();
+        save_batch_error(&conn, "user1", "post", 5, "some error", None).unwrap();
+
+        let raw: Option<String> = conn
+            .query_row(
+                "SELECT raw_response FROM ai_batch_errors LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(raw.is_none());
+    }
+
+    // ── Row serialization round-trip ──
+
+    #[test]
+    fn reply_row_serde_roundtrip() {
+        let original = sample_reply(42, 999);
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: ReplyRow = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.pid, original.pid);
+        assert_eq!(deserialized.tid, original.tid);
+        assert_eq!(deserialized.content, original.content);
+        assert_eq!(deserialized.username, original.username);
+    }
+
+    #[test]
+    fn post_row_serde_roundtrip() {
+        let original = sample_post(99);
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: PostRow = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tid, original.tid);
+        assert_eq!(deserialized.title, original.title);
+        assert_eq!(deserialized.has_video, original.has_video);
+    }
+}

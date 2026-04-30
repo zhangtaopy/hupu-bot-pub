@@ -80,7 +80,7 @@ struct ApiQuoteInfo {
 
 // ── Public data struct ──
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplyRow {
     pub pid: i64,
     pub tid: i64,
@@ -437,4 +437,121 @@ pub fn format_json(replies: &[ReplyRow]) -> Result<()> {
         .collect();
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reply_row_url_methods() {
+        let row = ReplyRow {
+            pid: 12345,
+            tid: 67890,
+            puid: None,
+            euid: Some("u1".into()),
+            username: "test".into(),
+            content: "hello".into(),
+            quote: 0,
+            quote_pid: None,
+            quote_tid: None,
+            quote_puid: None,
+            quote_euid: None,
+            quote_username: None,
+            quote_content: None,
+            quote_create_time: None,
+            create_time: 1700000000,
+            light_count: 0,
+            unlight_count: 0,
+            title: "标题".into(),
+            topic_id: None,
+            topic_name: None,
+            format_time: None,
+        };
+        assert_eq!(row.url(), "https://bbs.hupu.com/67890.html");
+        assert_eq!(row.reply_url(), "https://bbs.hupu.com/67890.html?pid=12345");
+    }
+
+    #[test]
+    fn json_value_to_string_string() {
+        let v = serde_json::Value::String("abc".into());
+        assert_eq!(json_value_to_string(&v), "abc");
+    }
+
+    #[test]
+    fn json_value_to_string_number() {
+        let v = serde_json::Value::Number(serde_json::Number::from(42));
+        assert_eq!(json_value_to_string(&v), "42");
+    }
+
+    #[test]
+    fn json_value_to_string_other() {
+        let v = serde_json::Value::Bool(true);
+        assert_eq!(json_value_to_string(&v), "");
+    }
+
+    #[test]
+    fn from_api_reply_item_basic() {
+        let mut item = ApiReplyItem {
+            pid: 1,
+            tid: 100,
+            puid: Some(999),
+            euid: Some(serde_json::Value::String("euid_abc".into())),
+            username: "用户".into(),
+            content: "内容".into(),
+            quote: Some(0),
+            quote_info: None,
+            create_time: 1700000000,
+            light_count: 5,
+            unlight_count: 0,
+            title: "标题".into(),
+            topic_id: Some(10),
+            topic_name: Some("步行街".into()),
+            format_time: Some("01-01".into()),
+        };
+        item.quote = None; // explicit default test
+        let row = ReplyRow::from(item);
+        assert_eq!(row.pid, 1);
+        assert_eq!(row.tid, 100);
+        assert_eq!(row.username, "用户");
+        assert_eq!(row.light_count, 5);
+        assert_eq!(row.quote, 0);
+    }
+
+    #[test]
+    fn from_api_reply_item_with_quote() {
+        let mut item = ApiReplyItem {
+            pid: 1,
+            tid: 100,
+            puid: None,
+            euid: None,
+            username: "用户".into(),
+            content: "回复".into(),
+            quote: Some(1),
+            quote_info: Some(ApiQuoteInfo {
+                pid: 99,
+                tid: 200,
+                puid: Some(888),
+                euid: Some(serde_json::Value::String("qeuid".into())),
+                username: "引用者".into(),
+                content: "引用内容".into(),
+                create_time: Some(1699990000),
+                light_count: 0,
+                title: None,
+            }),
+            create_time: 1700000000,
+            light_count: 0,
+            unlight_count: 0,
+            title: "".into(),
+            topic_id: None,
+            topic_name: None,
+            format_time: None,
+        };
+        item.euid = None; // will be set to None (JsonValue)
+        let row = ReplyRow::from(item);
+        assert_eq!(row.quote, 1);
+        assert_eq!(row.quote_pid, Some(99));
+        assert_eq!(row.quote_username, Some("引用者".into()));
+        assert_eq!(row.quote_content, Some("引用内容".into()));
+    }
 }

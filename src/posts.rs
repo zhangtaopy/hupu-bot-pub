@@ -327,3 +327,33 @@ pub fn format_json(posts: &[PostRow]) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn post_row_url() {
+        let row = PostRow {
+            tid: 12345,
+            euid: "u1".into(),
+            username: "test".into(),
+            title: "标题".into(),
+            summary: "摘要".into(),
+            create_time: 1700000000,
+            lastpost_time: 1700000100,
+            replies: 10,
+            visits: 100,
+            lights: 5,
+            recommend_num: 1,
+            forum_name: "步行街".into(),
+            topic_name: "步行街".into(),
+            topic_id: 1,
+            total_pics: 0,
+            has_video: false,
+            share_num: 0,
+            format_time: Some("2024-01-01".into()),
+        };
+        assert_eq!(row.url(), "https://bbs.hupu.com/12345.html");
+    }
+}

@@ -100,3 +100,62 @@ pub fn get() -> Config {
     let guard = CONFIG.read().unwrap();
     guard.as_ref().expect("Config not initialized").clone()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn parse_puid_from_cookie_normal() {
+        let cookie = "u=113152029|TDJlcHNpbG9u|...; other=value";
+        let result = Config::parse_puid_from_cookie(cookie).unwrap();
+        assert_eq!(result, "113152029");
+    }
+
+    #[test]
+    fn parse_puid_from_cookie_no_pipe() {
+        let cookie = "u=123456; other=value";
+        let result = Config::parse_puid_from_cookie(cookie).unwrap();
+        assert_eq!(result, "123456");
+    }
+
+    #[test]
+    fn parse_puid_from_cookie_missing_u_field() {
+        let cookie = "other=value; no=uid";
+        let result = Config::parse_puid_from_cookie(cookie);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_puid_from_cookie_empty_cookie() {
+        let result = Config::parse_puid_from_cookie("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_smid_from_cookie_normal() {
+        let cookie = "smidV2=abc123def456; other=value";
+        let result = Config::parse_smid_from_cookie(cookie).unwrap();
+        assert_eq!(result, "abc123def456");
+    }
+
+    #[test]
+    fn parse_smid_from_cookie_empty_value() {
+        let cookie = "smidV2=; other=value";
+        let result = Config::parse_smid_from_cookie(cookie);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_smid_from_cookie_missing_field() {
+        let cookie = "other=value; no=smid";
+        let result = Config::parse_smid_from_cookie(cookie);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_smid_from_cookie_empty_cookie() {
+        let result = Config::parse_smid_from_cookie("");
+        assert!(result.is_err());
+    }
+}
