@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use crate::posts::PostRow;
@@ -432,6 +433,47 @@ pub fn save_batch_error(
         rusqlite::params![euid, batch_type, batch_index as i64, error, raw_response, now],
     )?;
     Ok(())
+}
+
+pub fn query_topic_distribution(
+    conn: &Connection,
+    euid: &str,
+) -> Result<HashMap<String, usize>> {
+    let mut stmt = conn.prepare(
+        "SELECT topic_name, COUNT(*) as cnt FROM replies WHERE euid = ? AND topic_name IS NOT NULL GROUP BY topic_name ORDER BY cnt DESC",
+    )?;
+
+    let mut dist = HashMap::new();
+    let rows = stmt.query_map(rusqlite::params![euid], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+    })?;
+
+    for row in rows {
+        let (name, count) = row?;
+        dist.insert(name, count);
+    }
+    Ok(dist)
+}
+
+pub fn query_time_distribution(
+    conn: &Connection,
+    euid: &str,
+) -> Result<BTreeMap<String, usize>> {
+    let mut stmt = conn.prepare(
+        "SELECT strftime('%Y-%m', create_time, 'unixepoch') as month, COUNT(*) as cnt
+         FROM replies WHERE euid = ? GROUP BY month ORDER BY month",
+    )?;
+
+    let mut dist = BTreeMap::new();
+    let rows = stmt.query_map(rusqlite::params![euid], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+    })?;
+
+    for row in rows {
+        let (month, count) = row?;
+        dist.insert(month, count);
+    }
+    Ok(dist)
 }
 
 #[cfg(test)]

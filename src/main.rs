@@ -9,6 +9,7 @@ mod posts;
 mod replies;
 mod search;
 mod server;
+mod services;
 mod topic;
 mod utils;
 
