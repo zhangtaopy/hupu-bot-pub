@@ -1,0 +1,6 @@
+*.db
+*.db-shm
+*.db-wal
+debug_json.json
+config.json
+target/
