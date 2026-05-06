@@ -200,15 +200,22 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 初始化配置
-    config::init()?;
-    let cfg = config::get();
-
     let cli = Cli::parse();
-    let client = HupuClient::new(&cfg.cookie)?;
+
+    // CLI 命令需要配置才能运行，Serve 命令允许无配置启动（由前端引导配置）
+    match &cli.command {
+        Commands::Serve { .. } => {
+            config::init_optional();
+        }
+        _ => {
+            config::init()?;
+        }
+    }
 
     match cli.command {
         Commands::Like { tid, pid, fid, undo } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             if undo {
                 api::unlight(&client, &tid, &pid, &cfg.puid, &fid, &cfg.shumei_id).await?;
             } else {
@@ -216,9 +223,13 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Reply { topic_id, tid, content, quote_id } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             api::reply(&client, &topic_id, &tid, &content, &cfg.shumei_id, quote_id.as_deref()).await?;
         }
         Commands::Mentions { tab, since, limit, pages, format } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             let plate = mentions::tab_to_plate(&tab);
             let since_ts = match since {
                 Some(ref s) => Some(mentions::parse_since(s)?),
@@ -234,6 +245,8 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Search { keyword, page, limit, format, forum, sort } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             let response = search::search_posts(
                 &client,
                 &keyword,
@@ -253,6 +266,7 @@ async fn main() -> Result<()> {
             server::start_server(port).await?;
         }
         Commands::Analyze { euid, threshold, format } => {
+            config::get(); // ensure config is initialized for CLI
             let db_path = std::path::Path::new("hupu.db");
             let conn = db::open_db(db_path)?;
 
@@ -268,6 +282,8 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Replies { euid, max_pages, page_size, format } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             let db_path = std::path::Path::new("hupu.db");
             let conn = db::open_db(db_path)?;
 
@@ -284,6 +300,8 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Posts { euid, max_pages, format } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             let db_path = std::path::Path::new("hupu.db");
             let conn = db::open_db(db_path)?;
 
@@ -302,6 +320,8 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Topic { id, page, limit, format, detail, replies } => {
+            let cfg = config::get();
+            let client = HupuClient::new(&cfg.cookie)?;
             // 判断是帖子ID（9位数字）还是板块ID
             let is_post_id = id.len() == 9 && id.chars().all(|c| c.is_ascii_digit());
 

@@ -22,7 +22,13 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
 
     set_progress(&state, "准备中", 0, max_pages as usize, false, None);
 
-    let cfg = crate::config::get();
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+            return;
+        }
+    };
     let client = match crate::client::HupuClient::new(&cfg.cookie) {
         Ok(c) => c,
         Err(e) => {
@@ -117,7 +123,13 @@ pub async fn run_fetch_replies_background(
 
     set_progress(&state, "准备中", 0, max_pages as usize, false, None);
 
-    let cfg = crate::config::get();
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+            return;
+        }
+    };
     let client = match crate::client::HupuClient::new(&cfg.cookie) {
         Ok(c) => c,
         Err(e) => {

@@ -397,7 +397,15 @@ pub async fn start_ai_analysis(
         }
     }
 
-    let cfg = crate::config::get();
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "error": "请先配置 Cookie",
+            })));
+        }
+    };
     if cfg.deepseek_api_key.is_empty() {
         return Ok(Json(serde_json::json!({
             "status": "error",
@@ -507,7 +515,15 @@ pub async fn start_ai_post_analysis(
         }
     }
 
-    let cfg = crate::config::get();
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "error": "请先配置 Cookie",
+            })));
+        }
+    };
     if cfg.deepseek_api_key.is_empty() {
         return Ok(Json(serde_json::json!({
             "status": "error",

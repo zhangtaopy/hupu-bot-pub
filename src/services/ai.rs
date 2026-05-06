@@ -66,7 +66,13 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
         Some(posts_context)
     };
 
-    let cfg = crate::config::get();
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+            return;
+        }
+    };
     if cfg.deepseek_api_key.is_empty() {
         set_progress(&state, "error", 0, 0, true, Some("未配置 DeepSeek API Key".into()));
         return;
@@ -264,7 +270,13 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
         }
     };
 
-    let cfg = crate::config::get();
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+            return;
+        }
+    };
     if cfg.deepseek_api_key.is_empty() {
         set_progress(&state, "error", 0, 0, true, Some("未配置 DeepSeek API Key".into()));
         return;

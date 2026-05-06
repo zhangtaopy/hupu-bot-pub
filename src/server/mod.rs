@@ -1,4 +1,5 @@
 mod handlers;
+mod config_handlers;
 pub mod types;
 
 use axum::{routing::{get, post}, Router};
@@ -44,6 +45,8 @@ pub async fn start_server(port: u16) -> anyhow::Result<()> {
         .route("/api/posts/analyze/ai/start", post(handlers::start_ai_post_analysis))
         .route("/api/posts/analyze/ai-progress", get(handlers::get_ai_post_progress))
         .route("/api/euids", get(handlers::get_all_euids))
+        .route("/api/config/status", get(config_handlers::get_config_status))
+        .route("/api/config/save", post(config_handlers::save_config))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

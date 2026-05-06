@@ -2,11 +2,11 @@ fn default_concurrency() -> usize { 3 }
 
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::RwLock;
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
     pub cookie: String,
     /// 数美设备指纹，从 cookie 中的 smidV2 字段自动解析
@@ -54,7 +54,7 @@ impl Config {
 
     /// 从 cookie 中的 u 字段解析 puid
     /// cookie 中的 u 字段格式: u=113152029|TDJlcHNpbG9u|...
-    fn parse_puid_from_cookie(cookie: &str) -> Result<String> {
+    pub fn parse_puid_from_cookie(cookie: &str) -> Result<String> {
         for part in cookie.split(';') {
             let part = part.trim();
             if part.starts_with("u=") {
@@ -70,7 +70,7 @@ impl Config {
     }
 
     /// 从 cookie 中的 smidV2 字段解析数美设备指纹
-    fn parse_smid_from_cookie(cookie: &str) -> Result<String> {
+    pub fn parse_smid_from_cookie(cookie: &str) -> Result<String> {
         for part in cookie.split(';') {
             let part = part.trim();
             if part.starts_with("smidV2=") {
@@ -99,6 +99,43 @@ pub fn init() -> Result<()> {
 pub fn get() -> Config {
     let guard = CONFIG.read().unwrap();
     guard.as_ref().expect("Config not initialized").clone()
+}
+
+/// Try to get config instance, returns None if not initialized
+pub fn try_get() -> Option<Config> {
+    let guard = CONFIG.read().unwrap();
+    guard.clone()
+}
+
+/// Check if config has been initialized (currently unused but kept for API completeness)
+#[allow(dead_code)]
+pub fn is_initialized() -> bool {
+    let guard = CONFIG.read().unwrap();
+    guard.is_some()
+}
+
+/// Initialize config without failing — used by the Serve command
+/// so the web server can start even without a valid config
+pub fn init_optional() {
+    match Config::load() {
+        Ok(config) => {
+            let mut guard = CONFIG.write().unwrap();
+            *guard = Some(config);
+        }
+        Err(_) => {
+            // Leave CONFIG as None — server can still start
+        }
+    }
+}
+
+/// Save config to disk and update the global instance
+pub fn save(config: &Config) -> Result<()> {
+    let path = std::path::Path::new("config.json");
+    let json = serde_json::to_string_pretty(config)?;
+    fs::write(path, json)?;
+    let mut guard = CONFIG.write().unwrap();
+    *guard = Some(config.clone());
+    Ok(())
 }
 
 #[cfg(test)]
