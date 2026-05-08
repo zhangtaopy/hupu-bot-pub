@@ -310,8 +310,12 @@ fn find_running_browser_processes(browser_name: &str) -> Vec<String> {
 }
 
 fn launch_browser(browser_path: &str) -> Result<()> {
+    let data_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("hupu-bot-debug-profile");
     std::process::Command::new(browser_path)
         .arg(format!("--remote-debugging-port={}", DEBUG_PORT))
+        .arg(format!("--user-data-dir={}", data_dir.display()))
         .arg("--no-first-run")
         .arg("--no-default-browser-check")
         .arg("https://bbs.hupu.com")
