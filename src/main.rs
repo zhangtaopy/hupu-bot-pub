@@ -2,6 +2,7 @@ mod analyze;
 mod api;
 mod client;
 mod config;
+mod cookie_extract;
 mod db;
 mod deepseek;
 mod mentions;
@@ -170,6 +171,9 @@ enum Commands {
         format: String,
     },
 
+    /// 从 Chrome/Edge 浏览器自动提取虎扑 Cookie 并保存到 config.json
+    ExtractCookies,
+
     /// 获取板块帖子列表 / 帖子详情 / 热门回复
     Topic {
         /// 板块 ID（如 278 汽车区）或帖子 ID（9位数字）
@@ -206,6 +210,8 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::Serve { .. } => {
             config::init_optional();
+        }
+        Commands::ExtractCookies => {
         }
         _ => {
             config::init()?;
@@ -318,6 +324,9 @@ async fn main() -> Result<()> {
                 "simple" => posts::format_simple(&stored),
                 _ => posts::format_table(&stored),
             }
+        }
+        Commands::ExtractCookies => {
+            cookie_extract::run().await?;
         }
         Commands::Topic { id, page, limit, format, detail, replies } => {
             let cfg = config::get();

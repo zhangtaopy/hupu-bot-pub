@@ -47,6 +47,18 @@ cp config.example.json config.json
 
 ### 获取 Cookie
 
+**推荐方式 — 自动提取：**
+
+```bash
+cargo run -- extract-cookies
+```
+
+程序会自动查找系统中的 Chrome 或 Edge 浏览器，启动调试窗口打开虎扑论坛，你只需登录虎扑账号，Cookie 会自动保存到 `config.json`。
+
+> **Windows**: 自动从注册表获取浏览器安装路径，并提示关闭后台运行的浏览器进程以确保调试端口可用。
+> **macOS**: 从标准 Applications 路径查找浏览器，同样支持关闭后台进程。
+> **手动方式**（自动提取失败时）：
+
 1. 打开 Chrome 浏览器，登录虎扑
 2. 按 F12 打开开发者工具
 3. 切换到 Network 标签
@@ -55,6 +67,28 @@ cp config.example.json config.json
 6. 复制 Cookie 整行（从 `smidV2=...` 开始到结尾）
 
 ## 使用
+
+### 自动提取 Cookie
+
+自动从 Chrome/Edge 浏览器提取虎扑登录 Cookie，无需手动复制。
+
+```bash
+cargo run -- extract-cookies
+```
+
+**工作流程**:
+1. 检测是否已有带调试端口的浏览器在运行，有则直接提取
+2. 在系统中查找 Chrome 或 Edge 浏览器的安装路径
+3. 检测并提示关闭浏览器后台进程（需用户确认）
+4. 启动浏览器调试窗口，自动打开虎扑论坛
+5. 等待登录完成（检测到 `smidV2` 字段即为登录成功）
+6. 自动提取 Cookie 并保存到 `config.json`
+
+**注意事项**:
+- 如果浏览器已经在运行，后台进程会阻止调试端口开启，程序会提示你确认关闭进程
+- 登录超时时间为 5 分钟，超时后需要重新运行
+- Cookie 中的 `puid` 和 `shumei_id` 会自动解析
+- 已有的 `deepseek_api_key` 等配置会被保留
 
 ### 点赞回复
 
