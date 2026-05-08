@@ -42,10 +42,6 @@ pub async fn run() -> Result<()> {
     println!("未检测到浏览器调试端口，正在查找浏览器...");
     let (browser_name, browser_path) = find_browser()?;
 
-    // Kill background browser processes so the debug port can open
-    #[cfg(any(windows, target_os = "macos"))]
-    kill_browser_processes(browser_name);
-
     println!("正在启动 {} 并打开虎扑，请登录后等待自动提取...", browser_name);
     launch_browser(&browser_path)?;
 
@@ -203,110 +199,6 @@ fn get_registry_app_path(hive: winreg::HKEY, key_path: &str) -> Result<String> {
     use winreg::RegKey;
     let key = RegKey::predef(hive).open_subkey_with_flags(key_path, KEY_READ)?;
     Ok(key.get_value("")?)
-}
-
-/// Kill existing browser processes so the debug port can be opened.
-#[cfg(any(windows, target_os = "macos"))]
-fn kill_browser_processes(browser_name: &str) {
-    use std::io::{self, Write};
-
-    let proc_name = browser_process_name(browser_name);
-
-    let processes = find_running_browser_processes(browser_name);
-    if processes.is_empty() {
-        return;
-    }
-
-    println!();
-    println!(
-        "{} 浏览器进程正在后台运行（{} 个实例）。",
-        browser_name,
-        processes.len()
-    );
-    println!("  浏览器后台进程会阻止调试端口开启，需要先关闭。");
-    print!("  关闭现有 {} 进程？[y/N] ", proc_name);
-    io::stdout().flush().ok();
-
-    let mut input = String::new();
-    if io::stdin().read_line(&mut input).is_err() {
-        return;
-    }
-
-    if input.trim().to_lowercase() != "y" {
-        println!("  已跳过，尝试继续...");
-        return;
-    }
-
-    println!("  正在关闭浏览器进程...");
-    kill_browser_process(proc_name);
-    // Give the OS time to fully clean up
-    std::thread::sleep(Duration::from_secs(2));
-}
-
-#[cfg(windows)]
-fn browser_process_name(browser_name: &str) -> &str {
-    if browser_name == "Edge" { "msedge.exe" } else { "chrome.exe" }
-}
-
-#[cfg(target_os = "macos")]
-fn browser_process_name(browser_name: &str) -> &str {
-    if browser_name == "Edge" { "Microsoft Edge" } else { "Google Chrome" }
-}
-
-#[cfg(windows)]
-fn kill_browser_process(proc_name: &str) {
-    let _ = std::process::Command::new("taskkill")
-        .args(["/F", "/IM", proc_name])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-}
-
-#[cfg(target_os = "macos")]
-fn kill_browser_process(proc_name: &str) {
-    let _ = std::process::Command::new("pkill")
-        .args(["-f", proc_name])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-}
-
-#[cfg(windows)]
-fn find_running_browser_processes(browser_name: &str) -> Vec<String> {
-    let exe = browser_process_name(browser_name);
-    let output = std::process::Command::new("tasklist")
-        .args(["/FI", &format!("IMAGENAME eq {}", exe), "/FO", "CSV", "/NH"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout
-                .lines()
-                .filter(|line| line.contains(exe))
-                .map(|s| s.to_string())
-                .collect()
-        }
-        _ => Vec::new(),
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn find_running_browser_processes(browser_name: &str) -> Vec<String> {
-    let proc_name = browser_process_name(browser_name);
-    let output = std::process::Command::new("pgrep")
-        .args(["-l", proc_name])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout.lines().map(|s| s.to_string()).collect()
-        }
-        _ => Vec::new(),
-    }
 }
 
 fn launch_browser(browser_path: &str) -> Result<()> {
