@@ -156,6 +156,42 @@
     </div>
   </div>
 
+  <!-- ── DeepSeek API Key Setup Overlay (cookie already configured) ── -->
+  <div v-if="!needsConfig && needsDeepseekKey" class="fixed inset-0 z-[100] flex items-center justify-center" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%);">
+    <div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
+    <div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
+    <div class="w-full max-w-md mx-4 relative">
+      <div class="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/60 p-8">
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">AI</div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-800">完善 AI 配置</h1>
+            <p class="text-xs text-gray-400">Cookie 已配置，补充 DeepSeek API Key</p>
+          </div>
+        </div>
+        <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 border border-indigo-100">
+          <p class="text-sm text-indigo-700 font-medium mb-2">DeepSeek API Key</p>
+          <p class="text-xs text-indigo-600/80">用于 AI 智能分析功能（用户画像、发帖分析等），可在 <a href="https://platform.deepseek.com" target="_blank" class="underline hover:text-indigo-800">platform.deepseek.com</a> 申请。不填写则 AI 分析功能不可用。</p>
+        </div>
+        <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">DeepSeek API Key</label>
+          <input v-model="configDeepseekKey" type="text" placeholder="sk-..."
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+        </div>
+        <button @click="saveConfig"
+          class="w-full py-2.5 rounded-xl text-white font-medium text-sm transition-all duration-200 shadow-sm bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 hover:shadow-md active:scale-[0.98]">
+          <span v-if="configSaving">保存中...</span>
+          <span v-else>保存配置</span>
+        </button>
+        <button @click="skipDeepseekSetup"
+          class="w-full mt-3 py-2.5 rounded-xl text-gray-500 font-medium text-sm transition-all duration-200 hover:text-gray-700 hover:bg-gray-100">
+          跳过，稍后设置
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Header ── -->
   <header class="sticky top-0 z-50 bg-white/75 backdrop-blur-xl border-b border-gray-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
@@ -1024,6 +1060,7 @@ createApp({
 
     // Config setup state
     const needsConfig = ref(false);
+    const needsDeepseekKey = ref(false);
     const configSaving = ref(false);
     const configError = ref('');
     const configCookie = ref('');
@@ -1925,9 +1962,9 @@ createApp({
         if (res.ok) {
           const data = await res.json();
           needsConfig.value = !data.configured;
+          needsDeepseekKey.value = data.configured && !data.has_deepseek_key;
         }
       } catch (e) {
-        // If the API fails, assume config is needed
         needsConfig.value = true;
       }
     }
@@ -1936,13 +1973,13 @@ createApp({
       configSaving.value = true;
       configError.value = '';
       try {
+        const payload = needsDeepseekKey.value
+          ? { cookie: '', deepseek_api_key: configDeepseekKey.value }
+          : { cookie: configCookie.value, deepseek_api_key: configDeepseekKey.value };
         const res = await fetch('/api/config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            cookie: configCookie.value,
-            deepseek_api_key: configDeepseekKey.value,
-          }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok || data.error) {
@@ -1956,6 +1993,10 @@ createApp({
       }
     }
 
+    function skipDeepseekSetup() {
+      needsDeepseekKey.value = false;
+    }
+
     onMounted(async () => {
       await checkConfigStatus();
       if (!needsConfig.value) {
@@ -1963,7 +2004,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, configSaving, configError, configCookie, configDeepseekKey, saveConfig };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsDeepseekKey, skipDeepseekSetup, configSaving, configError, configCookie, configDeepseekKey, saveConfig };
   }
 }).mount('#app');
 </script>

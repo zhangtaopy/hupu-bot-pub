@@ -45,8 +45,10 @@ impl Config {
         config.shumei_id = Self::parse_smid_from_cookie(&config.cookie)?;
 
         // 如果 puid 为空，从 cookie 中自动解析
+        // puid 不是启动 serve 的硬性条件，解析失败时保持空值
         if config.puid.is_empty() {
-            config.puid = Self::parse_puid_from_cookie(&config.cookie)?;
+            config.puid = Self::parse_puid_from_cookie(&config.cookie)
+                .unwrap_or_default();
         }
 
         Ok(config)

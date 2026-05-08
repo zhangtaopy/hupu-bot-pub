@@ -52,6 +52,17 @@ pub async fn save_config(
     let cookie = body.cookie.trim().to_string();
     let deepseek_api_key = body.deepseek_api_key.trim().to_string();
 
+    // DeepSeek-key-only update: cookie already configured, just update the API key
+    if cookie.is_empty() && !deepseek_api_key.is_empty() {
+        if let Some(mut existing) = crate::config::try_get() {
+            existing.deepseek_api_key = deepseek_api_key;
+            return crate::config::save(&existing)
+                .map(|_| Json(serde_json::json!({ "success": true })))
+                .map_err(|e| internal_error(&format!("保存配置失败: {}", e)));
+        }
+        return Err(bad_request("无法更新：配置尚未初始化"));
+    }
+
     if cookie.is_empty() {
         return Err(bad_request("Cookie 不能为空"));
     }
@@ -64,7 +75,7 @@ pub async fn save_config(
     }
 
     // 解析 puid（可选，解析失败不阻断）
-    let puid = crate::config::Config::parse_puid_from_cookie(&cookie).unwrap_or_default();
+    let puid: String = crate::config::Config::parse_puid_from_cookie(&cookie).unwrap_or_default();
     let shumei_id = crate::config::Config::parse_smid_from_cookie(&cookie).unwrap_or_default();
 
     let config = crate::config::Config {
