@@ -94,6 +94,21 @@
     ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
+    /* ── Thinking dots animation ── */
+    .thinking-dots span {
+      animation: dotPulse 1.4s infinite both;
+      font-weight: bold;
+      font-size: 1.2em;
+      letter-spacing: 2px;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotPulse {
+      0%, 20% { opacity: 0; }
+      50% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
     /* ── Group expand transition ── */
     .group-body-enter-active, .group-body-leave-active {
       transition: all 0.25s ease;
@@ -212,6 +227,11 @@
           :class="activeTab==='posts' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-indigo-600' : 'text-gray-500 hover:text-gray-700'"
           class="px-3.5 py-1.5 text-sm rounded-lg transition-all duration-200 font-medium">
           发帖数据
+        </button>
+        <button @click="activeTab='qa'"
+          :class="activeTab==='qa' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+          class="px-3.5 py-1.5 text-sm rounded-lg transition-all duration-200 font-medium">
+          AI 问答
         </button>
       </div>
 
@@ -1034,8 +1054,107 @@
     </div>
   </div>
 
+  <!-- ═══════════════════ QA TAB ═══════════════════ -->
+  <div v-if="activeTab === 'qa'" class="max-w-4xl mx-auto px-4 pt-4 pb-12">
+    <!-- User info -->
+    <div v-if="qaUsername" class="mt-6 animate-card">
+      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm" style="background: linear-gradient(135deg, #10b981, #059669);">
+          {{ qaUsername.charAt(0) }}
+        </div>
+        <div>
+          <span class="font-semibold text-gray-800">{{ qaUsername }}</span>
+          <span class="text-gray-400 text-sm ml-2 font-mono">{{ euid }}</span>
+          <span v-if="qaReplyCount > 0 || qaPostCount > 0" class="text-gray-400 text-sm ml-2">
+            — {{ qaReplyCount ? qaReplyCount + '条回帖' : '' }}{{ qaReplyCount && qaPostCount ? '，' : '' }}{{ qaPostCount ? qaPostCount + '条发帖' : '' }}可用于问答
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat History -->
+    <div v-if="qaHistory.length" class="mt-6 space-y-4">
+      <div v-for="(msg, idx) in qaHistory" :key="idx" class="animate-card">
+        <!-- User Question -->
+        <div class="flex justify-end mb-3">
+          <div class="max-w-[75%] rounded-2xl rounded-br-md px-4 py-3 shadow-sm" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">
+            <p class="text-sm text-white">{{ msg.question }}</p>
+          </div>
+        </div>
+        <!-- AI Answer -->
+        <div class="flex justify-start">
+          <div class="max-w-[85%] bg-white/80 backdrop-blur-sm rounded-2xl rounded-bl-md px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white shadow-sm" style="background: linear-gradient(135deg, #10b981, #059669);">AI</span>
+              <span class="text-xs text-gray-400">{{ msg.time }}</span>
+            </div>
+            <div v-if="msg.thinking" class="thinking-dots text-sm text-gray-500 font-medium">
+              <span>.</span><span>.</span><span>.</span>
+            </div>
+            <div v-else class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ msg.answer }}</div>
+            <div v-if="msg.error" class="text-sm text-rose-600 mt-1">{{ msg.error }}</div>
+            <!-- Prompt detail toggle -->
+            <div v-if="!msg.thinking && msg.promptDetail" class="mt-2 border-t border-gray-100 pt-2">
+              <button @click="togglePromptDetail(idx)"
+                class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-90': msg.showDetail }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                查看请求数据
+              </button>
+              <pre v-show="msg.showDetail" class="mt-2 p-3 rounded-lg text-xs text-gray-600 whitespace-pre-wrap font-mono max-h-[30rem] overflow-y-auto" style="background: linear-gradient(135deg, #f8fafc, #f1f5f9); border: 1px solid #e5e7eb;">{{ msg.promptDetail }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Question Input -->
+    <div class="mt-6 animate-card">
+      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 向 AI 提问
+          </span>
+          <span class="text-xs text-gray-400">基于该用户的发帖回帖数据回答</span>
+        </div>
+        <div class="flex gap-2">
+          <input v-model="qaQuestion" @keyup.enter="askQuestion" placeholder="例如：这个用户喜欢什么球队？他一般在哪些板块活跃？他是做什么工作的？"
+            :disabled="qaLoading"
+            class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none transition-all duration-200 disabled:opacity-50">
+          <button @click="askQuestion" :disabled="qaLoading || !qaQuestion.trim() || !euid.trim()"
+            class="px-5 py-2.5 rounded-xl text-sm font-medium text-white shadow-sm hover:shadow-md disabled:opacity-40 disabled:shadow-none transition-all duration-200 active:scale-95 flex items-center gap-1.5"
+            style="background: linear-gradient(135deg, #10b981, #059669);">
+            <svg v-if="!qaLoading" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+            </svg>
+            <span v-if="qaLoading">思考中...</span>
+            <span v-else>提问</span>
+          </button>
+        </div>
+        <div v-if="qaError" class="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ qaError }}</div>
+        <div v-if="!euid.trim()" class="mt-2 text-xs text-gray-400">请先在顶部搜索框选择或输入要查询的用户 euid</div>
+      </div>
+    </div>
+
+    <!-- Suggested Questions -->
+    <div v-if="euid.trim()" class="mt-4 animate-card">
+      <div class="bg-white/60 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-4">
+        <span class="text-xs font-medium text-gray-500 mb-2 block">建议问题</span>
+        <div class="flex flex-wrap gap-2">
+          <button v-for="q in suggestedQuestions" :key="q" @click="qaQuestion = q; askQuestion()"
+            :disabled="qaLoading"
+            class="text-xs px-3 py-1.5 rounded-full font-medium transition-all duration-200 hover:shadow-sm disabled:opacity-50 border"
+            style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; border-color: #a7f3d0;">
+            {{ q }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Empty State ── -->
-  <div v-if="!loading && !postLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length)) && !error"
+  <div v-if="!loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
     class="max-w-6xl mx-auto px-4 mt-24 text-center">
     <div class="w-20 h-20 mx-auto mb-5 rounded-3xl flex items-center justify-center shadow-sm" style="background: linear-gradient(135deg, #eef2ff, #e0e7ff);">
       <svg class="w-10 h-10" style="color: #818cf8;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1043,7 +1162,7 @@
           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
     </div>
-    <p class="text-gray-400 text-sm font-medium">{{ activeTab === 'replies' ? '输入用户 euid 开始分析回帖' : '输入用户 euid 查看发帖数据' }}</p>
+    <p class="text-gray-400 text-sm font-medium">{{ activeTab === 'replies' ? '输入用户 euid 开始分析回帖' : (activeTab === 'posts' ? '输入用户 euid 查看发帖数据' : '输入用户 euid 开始 AI 问答') }}</p>
   </div>
 </div>
 
@@ -1120,6 +1239,22 @@ createApp({
     const videoCount = ref(0);
     let postTopicChart = null;
     let postAiPollTimer = null;
+
+    // QA state
+    const qaQuestion = ref('');
+    const qaHistory = ref([]);
+    const qaLoading = ref(false);
+    const qaError = ref('');
+    const qaUsername = ref('');
+    const qaReplyCount = ref(0);
+    const qaPostCount = ref(0);
+    const suggestedQuestions = [
+      '这个用户主要在哪些板块活动？',
+      '分析一下这个用户的发帖风格和特点',
+      '这个用户最关注什么话题？',
+      '这个用户在虎扑上最活跃的时期是什么时候？',
+      '根据发言推测这个用户的个人信息',
+    ];
 
     // Computed: sorted posts
     const sortedPosts = computed(() => {
@@ -1532,6 +1667,11 @@ createApp({
     // Reset button text to "分析" when euid changes
     watch(euid, () => {
       hasSimilarityResults.value = false;
+      qaHistory.value = [];
+      qaUsername.value = '';
+      qaReplyCount.value = 0;
+      qaPostCount.value = 0;
+      qaError.value = '';
     });
 
     let debounceTimer = null;
@@ -1645,6 +1785,75 @@ createApp({
         aiLoading.value = false;
         aiProgressPhase.value = '';
       }
+    }
+
+    // ── Q&A ──
+
+    async function askQuestion() {
+      if (!euid.value.trim() || !qaQuestion.value.trim()) return;
+
+      const question = qaQuestion.value.trim();
+      qaQuestion.value = '';
+      qaError.value = '';
+      qaLoading.value = true;
+
+      const now = new Date();
+      const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+      // Immediately show question with thinking state
+      const entry = { question, answer: '', time, error: null, thinking: true, promptDetail: '', showDetail: false };
+      qaHistory.value.push(entry);
+      await nextTick();
+
+      try {
+        const res = await fetch('/api/qa/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ euid: euid.value.trim(), question }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || `请求失败 (HTTP ${res.status})`);
+        }
+
+        if (data.username) {
+          qaUsername.value = data.username;
+        }
+
+        // Query stats for user info
+        try {
+          const statsRes = await fetch(`/api/stats?euid=${encodeURIComponent(euid.value)}`);
+          if (statsRes.ok) {
+            const statsData = await statsRes.json();
+            qaReplyCount.value = statsData.total_replies || 0;
+          }
+          const postsRes = await fetch(`/api/posts?euid=${encodeURIComponent(euid.value)}&limit=1`);
+          if (postsRes.ok) {
+            const postsData = await postsRes.json();
+            qaPostCount.value = postsData.total || 0;
+          }
+        } catch (e) {
+          // ignore stats errors
+        }
+
+        // Update the entry with actual answer
+        entry.thinking = false;
+        entry.answer = data.answer;
+        entry.promptDetail = data.prompt_detail || '';
+      } catch (e) {
+        entry.thinking = false;
+        entry.error = e.message || '问答请求失败';
+        qaError.value = e.message || '问答请求失败';
+      } finally {
+        qaLoading.value = false;
+      }
+    }
+
+    function togglePromptDetail(idx) {
+      const msg = qaHistory.value[idx];
+      if (msg) msg.showDetail = !msg.showDetail;
     }
 
     async function exportImage() {
@@ -2004,7 +2213,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsDeepseekKey, skipDeepseekSetup, configSaving, configError, configCookie, configDeepseekKey, saveConfig };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsDeepseekKey, skipDeepseekSetup, configSaving, configError, configCookie, configDeepseekKey, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
   }
 }).mount('#app');
 </script>

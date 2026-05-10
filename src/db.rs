@@ -476,6 +476,146 @@ pub fn query_time_distribution(
     Ok(dist)
 }
 
+// ── Keyword search for Q&A ──
+
+/// Search replies by keywords, filtered by euid and optional topics.
+pub fn search_replies(
+    conn: &Connection,
+    euid: &str,
+    keywords: &[String],
+    topic_filter: &[String],
+    sort_by: &str,
+    max_results: usize,
+) -> Result<Vec<ReplyRow>> {
+    if keywords.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut conditions = vec!["euid = ?".to_string()];
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(euid.to_string())];
+
+    // Build keyword conditions (OR across content and title)
+    let mut kw_conds = Vec::new();
+    for kw in keywords {
+        kw_conds.push("(content LIKE ? OR title LIKE ?)".to_string());
+        let pattern = format!("%{}%", kw);
+        params.push(Box::new(pattern.clone()));
+        params.push(Box::new(pattern));
+    }
+    if !kw_conds.is_empty() {
+        conditions.push(format!("({})", kw_conds.join(" OR ")));
+    }
+
+    // Topic filter
+    if !topic_filter.is_empty() {
+        let mut topic_conds = Vec::new();
+        for topic in topic_filter {
+            topic_conds.push("topic_name LIKE ?".to_string());
+            params.push(Box::new(format!("%{}%", topic)));
+        }
+        if !topic_conds.is_empty() {
+            conditions.push(format!("({})", topic_conds.join(" OR ")));
+        }
+    }
+
+    let order = match sort_by {
+        "create_time" => "create_time DESC",
+        "light_count" => "light_count DESC",
+        _ => "create_time DESC", // default for keyword search
+    };
+
+    let sql = format!(
+        "SELECT pid, tid, puid, euid, username, content,
+                quote, quote_pid, quote_tid, quote_puid, quote_euid,
+                quote_username, quote_content, quote_create_time,
+                create_time, light_count, unlight_count,
+                title, topic_id, topic_name, format_time
+         FROM replies WHERE {} ORDER BY {} LIMIT ?",
+        conditions.join(" AND "), order
+    );
+    params.push(Box::new(max_results as i64));
+
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(param_refs.as_slice(), row_to_reply)?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Search posts by keywords, filtered by euid and optional topics.
+pub fn search_posts(
+    conn: &Connection,
+    euid: &str,
+    keywords: &[String],
+    topic_filter: &[String],
+    sort_by: &str,
+    max_results: usize,
+) -> Result<Vec<PostRow>> {
+    if keywords.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut conditions = vec!["euid = ?".to_string()];
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(euid.to_string())];
+
+    // Build keyword conditions
+    let mut kw_conds = Vec::new();
+    for kw in keywords {
+        kw_conds.push("(title LIKE ? OR summary LIKE ?)".to_string());
+        let pattern = format!("%{}%", kw);
+        params.push(Box::new(pattern.clone()));
+        params.push(Box::new(pattern));
+    }
+    if !kw_conds.is_empty() {
+        conditions.push(format!("({})", kw_conds.join(" OR ")));
+    }
+
+    // Topic filter
+    if !topic_filter.is_empty() {
+        let mut topic_conds = Vec::new();
+        for topic in topic_filter {
+            topic_conds.push("(topic_name LIKE ? OR forum_name LIKE ?)".to_string());
+            let pattern = format!("%{}%", topic);
+            params.push(Box::new(pattern.clone()));
+            params.push(Box::new(pattern));
+        }
+        if !topic_conds.is_empty() {
+            conditions.push(format!("({})", topic_conds.join(" OR ")));
+        }
+    }
+
+    let order = match sort_by {
+        "create_time" => "create_time DESC",
+        "light_count" | "lights" => "lights DESC",
+        "replies" => "replies DESC",
+        _ => "create_time DESC",
+    };
+
+    let sql = format!(
+        "SELECT tid, euid, username, title, summary,
+                create_time, lastpost_time, replies, visits, lights,
+                recommend_num, forum_name, topic_name, topic_id,
+                total_pics, has_video, share_num, format_time
+         FROM posts WHERE {} ORDER BY {} LIMIT ?",
+        conditions.join(" AND "), order
+    );
+    params.push(Box::new(max_results as i64));
+
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(param_refs.as_slice(), row_to_post)?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

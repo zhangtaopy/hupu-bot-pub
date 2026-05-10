@@ -75,6 +75,74 @@ const SYNTHESIS_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户画像专
   "summary": "200-300字的综合评语,评论可以激烈一点，可以不留情面，但要基于分析结果，不能无中生有。"
 }"#;
 
+// ── Q&A: Intent recognition prompt ──
+
+const QA_INTENT_PROMPT: &str = r#"你是一个搜索关键词生成专家。你需要理解用户想了解什么信息，然后生成能在数据库中找到答案的搜索关键词。
+
+数据库有两张表，存储用户的历史发帖和回帖：
+- replies: content(回帖内容), title(帖子标题), topic_name(板块名), create_time(时间戳), light_count(点亮数)
+- posts: title(帖子标题), summary(帖子摘要), topic_name(板块名), forum_name(分区名), create_time(时间戳), replies(回复数), visits(浏览数), lights(点亮数)
+
+每次你会收到该用户已有的基础信息（统计数据、已推断的个人信息、AI画像摘要等），请充分利用这些信息生成更精准的搜索关键词。
+
+核心原则：
+- 如果已知信息中有地点相关线索（如籍贯、现居城市），把具体地名加入关键词
+- 如果已知信息中有兴趣爱好线索（如主队、游戏），把相关词汇加入关键词
+- 不要用代词（他、她、我、你）和疑问词（哪里、什么、怎么、为什么）做关键词
+- 不要用"推断""依据""分析""评价"等元词汇做关键词
+- 要结合已知信息，推测该用户可能说过什么内容
+
+示例：
+- 已知籍贯:湖南株洲/现居:广东珠海，问"他是哪里人" → 关键词: ["株洲", "湖南", "珠海", "广东", "老家", "家乡", "本地人", "住在"]
+- 已知主队:湖人，问"他喜欢什么球队" → 关键词: ["湖人", "NBA", "主队", "球迷", "勇士", "篮球", "季后赛"]
+- 已知职业:程序员，问"做什么工作" → 关键词: ["程序员", "代码", "加班", "互联网", "公司", "上班", "工资"]
+- 问"开什么车" → 关键词: ["买车", "提车", "开车", "油耗", "4S", "保养", "驾照"]
+
+输出规则：
+1. search_keywords: 8个以内，优先包含已知信息中的具体词汇，不要代词/疑问词/元词汇
+2. search_tables: ["replies"] 或 ["posts"] 或 ["replies","posts"]。一般问题查 replies，发帖风格类问题查 posts，不确定就两个都查
+3. topic_filter: 如果问题明显偏向某类板块才填（如篮球→["NBA","篮球","CBA"]），否则空数组
+4. sort_by: 一般用 "relevance"，时间类问题用 "create_time"，热度类问题用 "light_count"
+5. max_results: 一般50，需要大量样本时用80-100
+
+输出严格json格式，不要包含其他文字。"#;
+
+// ── Q&A: Answer generation prompt ──
+
+const QA_ANSWER_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你会收到三部分信息：
+
+1. 用户概览：包含该用户的统计数据、板块分布、以及已有的AI分析结果（用户画像、个人信息推断等）
+2. 相关数据：根据用户问题从数据库中查询到的相关回帖和发帖
+3. 用户的问题
+
+根据以上信息回答用户的问题。要求：
+1. 充分利用"用户概览"中的统计数据和AI分析结果，特别是已有的用户画像和个人信息推断
+2. 结合"相关数据"中的具体内容作为佐证
+3. 基于数据实事求是地回答，不要编造信息
+4. 如果数据中没有相关信息，明确说明"根据现有数据无法判断"
+5. 回答要具体，引用相关的数据和分析结果作为依据
+6. 回答风格自然、友好，像在和用户聊天
+7. 不需要提到"根据查询结果"等元描述，直接回答即可"#;
+
+// ── Q&A data structures ──
+
+#[derive(Deserialize, Debug)]
+pub struct QueryPlan {
+    #[serde(default)]
+    pub search_keywords: Vec<String>,
+    #[serde(default)]
+    pub search_tables: Vec<String>,
+    #[serde(default)]
+    pub topic_filter: Vec<String>,
+    #[serde(default = "default_sort")]
+    pub sort_by: String,
+    #[serde(default = "default_max_results")]
+    pub max_results: usize,
+}
+
+fn default_sort() -> String { "relevance".into() }
+fn default_max_results() -> usize { 50 }
+
 // ── Post analysis prompts ──
 
 const POST_BATCH_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户发帖分析专家。分析以下用户的发帖内容，提取其发帖风格、关注话题和内容特点。
@@ -437,6 +505,56 @@ async fn call_deepseek(client: &reqwest::Client, api_key: &str, system_prompt: &
     Ok(DeepSeekResult { value, raw_content: content })
 }
 
+/// Call DeepSeek without json_object mode — returns plain text.
+async fn call_deepseek_text(client: &reqwest::Client, api_key: &str, system_prompt: &str, user_prompt: &str) -> Result<String> {
+    #[derive(Serialize)]
+    struct TextRequest {
+        model: String,
+        messages: Vec<Message>,
+        max_tokens: u32,
+    }
+
+    let request = TextRequest {
+        model: MODEL.to_string(),
+        messages: vec![
+            Message { role: "system".to_string(), content: system_prompt.to_string() },
+            Message { role: "user".to_string(), content: user_prompt.to_string() },
+        ],
+        max_tokens: 4096,
+    };
+
+    let resp = client
+        .post("https://api.deepseek.com/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request)
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let raw_text = resp.text().await?;
+
+    let body: DeepSeekResponse = serde_json::from_str(&raw_text)
+        .map_err(|e| anyhow::anyhow!("解码响应失败: {}，原始响应: {}", e, safe_truncate(&raw_text, 2000)))?;
+
+    if let Some(err) = body.error {
+        bail!("DeepSeek API error: {} ({:?})，原始响应: {}", err.message, err.type_, safe_truncate(&raw_text, 2000));
+    }
+
+    if !status.is_success() {
+        bail!("DeepSeek API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
+    }
+
+    let content = body.choices
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
+        .message
+        .content
+        .clone();
+
+    Ok(content)
+}
+
 // ── Public entry points ──
 
 /// Format posts into a context string for inclusion in identity analysis.
@@ -563,4 +681,141 @@ pub async fn synthesize_post_results(
     let analysis: AiPostAnalysisResult = serde_json::from_value(result.value.clone())
         .map_err(|e| anyhow::anyhow!("解析AI发帖分析结果失败: {}，原始响应: {}", e, serde_json::to_string(&result.value).unwrap_or_default()))?;
     Ok(analysis)
+}
+
+// ── Q&A: 3-step flow ──
+
+/// Step 1: AI analyzes the question and returns a query plan.
+pub async fn recognize_intent(
+    client: &reqwest::Client,
+    api_key: &str,
+    question: &str,
+    user_ctx: &str,
+) -> Result<QueryPlan> {
+    let user_prompt = format!(
+        "已知该用户的基础信息：\n\n{}\n\n用户的问题是：{}\n\n请根据用户已有信息和问题，生成用于搜索相关内容的查询计划json。",
+        user_ctx, question
+    );
+    let result = call_deepseek(client, api_key, QA_INTENT_PROMPT, &user_prompt).await?;
+    let plan: QueryPlan = serde_json::from_value(result.value)
+        .map_err(|e| anyhow::anyhow!("解析查询计划失败: {}，原始: {}", e, result.raw_content))?;
+    Ok(plan)
+}
+
+/// Format query results into a context string for the AI.
+pub fn format_query_results(replies: &[ReplyRow], posts: &[PostRow]) -> String {
+    let mut ctx = String::new();
+
+    if !posts.is_empty() {
+        ctx.push_str(&format!("=== 相关发帖（共{}条）===\n", posts.len()));
+        for (i, p) in posts.iter().enumerate() {
+            ctx.push_str(&format!(
+                "{}. [{}] {} ({}回复/{}亮/{}浏览)\n",
+                i + 1, p.topic_name, p.title, p.replies, p.lights, p.visits
+            ));
+            if !p.summary.is_empty() {
+                ctx.push_str(&format!("   摘要: {}\n", p.summary));
+            }
+        }
+        ctx.push('\n');
+    }
+
+    if !replies.is_empty() {
+        ctx.push_str(&format!("=== 相关回帖（共{}条）===\n", replies.len()));
+        for (i, r) in replies.iter().enumerate() {
+            ctx.push_str(&format!(
+                "{}. [{}] {} | {}亮\n   {}\n",
+                i + 1,
+                r.topic_name.as_deref().unwrap_or("未知"),
+                r.title,
+                r.light_count,
+                r.content,
+            ));
+        }
+    }
+
+    ctx
+}
+
+// ── User overview data for Q&A context ──
+
+pub struct UserOverview {
+    pub total_replies: i64,
+    pub total_posts: i64,
+    pub topic_distribution: Vec<(String, usize)>, // top N topics
+    pub reply_time_distribution: Vec<(String, usize)>, // monthly reply counts
+    pub activity_period: Option<String>,          // "2023-01 ~ 2026-05"
+    pub ai_reply_analysis_summary: Option<String>,  // summary field from ai_analysis
+    pub ai_post_analysis_summary: Option<String>,   // summary field from ai_post_analysis
+    pub ai_reply_personal_info: Option<String>,     // personal_info JSON from ai_analysis
+}
+
+impl UserOverview {
+    pub fn format(&self) -> String {
+        let mut s = String::new();
+
+        s.push_str(&format!("总回帖数: {}\n", self.total_replies));
+        s.push_str(&format!("总发帖数: {}\n", self.total_posts));
+
+        if let Some(ref period) = self.activity_period {
+            s.push_str(&format!("活跃时间范围: {}\n", period));
+        }
+
+        if !self.topic_distribution.is_empty() {
+            s.push_str("\n活跃板块分布（前10）:\n");
+            for (i, (topic, count)) in self.topic_distribution.iter().enumerate() {
+                s.push_str(&format!("  {}. {} - {}条\n", i + 1, topic, count));
+            }
+        }
+
+        if !self.reply_time_distribution.is_empty() {
+            s.push_str("\n月度回帖分布:\n");
+            for (month, count) in &self.reply_time_distribution {
+                s.push_str(&format!("  {}: {}条\n", month, count));
+            }
+        }
+
+        if let Some(ref info) = self.ai_reply_personal_info {
+            s.push_str(&format!("\n已推断的个人信息:\n{}\n", info));
+        }
+
+        if let Some(ref summary) = self.ai_reply_analysis_summary {
+            s.push_str(&format!("\nAI回帖分析评语:\n{}\n", summary));
+        }
+
+        if let Some(ref summary) = self.ai_post_analysis_summary {
+            s.push_str(&format!("\nAI发帖分析评语:\n{}\n", summary));
+        }
+
+        s
+    }
+}
+
+/// Step 3: Generate the final answer based on query results and user overview.
+pub async fn generate_answer(
+    client: &reqwest::Client,
+    api_key: &str,
+    question: &str,
+    _username: &str,
+    overview: &UserOverview,
+    replies: &[ReplyRow],
+    posts: &[PostRow],
+) -> Result<String> {
+    let overview_text = overview.format();
+    let context = format_query_results(replies, posts);
+
+    // Truncate raw context if too large (keep overview intact)
+    let max_context = 20_000;
+    let context = if context.chars().count() > max_context {
+        format!("{}...(结果过多，已截断)", safe_truncate(&context, max_context))
+    } else {
+        context
+    };
+
+    let user_prompt = format!(
+        "用户概览：\n\n{}\n\n---\n\n相关数据：\n\n{}\n\n---\n\n用户的问题是：{}\n\n请基于以上信息回答。",
+        overview_text, context, question
+    );
+
+    call_deepseek_text(client, api_key, QA_ANSWER_PROMPT, &user_prompt).await
 }

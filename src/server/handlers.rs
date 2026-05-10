@@ -689,3 +689,56 @@ pub async fn get_all_euids(
         .collect();
     Ok(Json(entries))
 }
+
+// ── Q&A ──
+
+pub async fn qa_ask(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Json(body): axum::extract::Json<QaAskRequest>,
+) -> Result<Json<QaAskResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let cfg = match crate::config::try_get() {
+        Some(cfg) => cfg,
+        None => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "请先配置 Cookie"})),
+            ));
+        }
+    };
+
+    if cfg.deepseek_api_key.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "未配置 DeepSeek API Key，请在 config.json 中添加 deepseek_api_key"})),
+        ));
+    }
+
+    if body.question.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "问题不能为空"})),
+        ));
+    }
+
+    let result = crate::services::qa::run_qa(
+        &state.db_path,
+        &state.http_client,
+        &cfg.deepseek_api_key,
+        &body.euid,
+        &body.question,
+    )
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
+
+    Ok(Json(QaAskResponse {
+        answer: result.answer,
+        username: result.username,
+        euid: body.euid,
+        prompt_detail: result.prompt_detail,
+    }))
+}

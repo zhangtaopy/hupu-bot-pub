@@ -178,3 +178,17 @@ pub struct EuidEntry {
     pub euid: String,
     pub username: String,
 }
+
+#[derive(Deserialize)]
+pub struct QaAskRequest {
+    pub euid: String,
+    pub question: String,
+}
+
+#[derive(Serialize)]
+pub struct QaAskResponse {
+    pub answer: String,
+    pub username: String,
+    pub euid: String,
+    pub prompt_detail: String,
+}
