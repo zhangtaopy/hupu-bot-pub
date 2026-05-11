@@ -109,20 +109,22 @@ const QA_INTENT_PROMPT: &str = r#"你是一个搜索关键词生成专家。你�
 
 // ── Q&A: Answer generation prompt ──
 
-const QA_ANSWER_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你会收到三部分信息：
+const QA_ANSWER_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你会收到以下信息：
 
-1. 用户概览：包含该用户的统计数据、板块分布、以及已有的AI分析结果（用户画像、个人信息推断等）
-2. 相关数据：根据用户问题从数据库中查询到的相关回帖和发帖
-3. 用户的问题
+1. 对话历史（可选）：之前几轮问答的简要记录，帮助你理解追问的上下文
+2. 用户概览：包含该用户的统计数据、板块分布、以及已有的AI分析结果（用户画像、个人信息推断等）
+3. 相关数据：根据用户问题从数据库中查询到的相关回帖和发帖
+4. 用户的问题
 
 根据以上信息回答用户的问题。要求：
-1. 充分利用"用户概览"中的统计数据和AI分析结果，特别是已有的用户画像和个人信息推断
-2. 结合"相关数据"中的具体内容作为佐证
-3. 基于数据实事求是地回答，不要编造信息
-4. 如果数据中没有相关信息，明确说明"根据现有数据无法判断"
-5. 回答要具体，引用相关的数据和分析结果作为依据
-6. 回答风格自然、友好，像在和用户聊天
-7. 不需要提到"根据查询结果"等元描述，直接回答即可"#;
+1. 如果提供了对话历史，注意理解追问的上下文（如"那"、"他"等指代可能指向之前讨论的内容）
+2. 充分利用"用户概览"中的统计数据和AI分析结果，特别是已有的用户画像和个人信息推断
+3. 结合"相关数据"中的具体内容作为佐证
+4. 基于数据实事求是地回答，不要编造信息
+5. 如果数据中没有相关信息，明确说明"根据现有数据无法判断"
+6. 回答要具体，引用相关的数据和分析结果作为依据
+7. 回答风格自然、友好，像在和用户聊天
+8. 不需要提到"根据查询结果"等元描述，直接回答即可"#;
 
 // ── Q&A data structures ──
 
@@ -691,10 +693,13 @@ pub async fn recognize_intent(
     api_key: &str,
     question: &str,
     user_ctx: &str,
+    history_ctx: &str,
 ) -> Result<QueryPlan> {
     let user_prompt = format!(
-        "已知该用户的基础信息：\n\n{}\n\n用户的问题是：{}\n\n请根据用户已有信息和问题，生成用于搜索相关内容的查询计划json。",
-        user_ctx, question
+        "已知该用户的基础信息：\n\n{}\n\n{}\n\n用户的问题是：{}\n\n请根据用户已有信息、对话历史和问题，生成用于搜索相关内容的查询计划json。",
+        user_ctx,
+        if history_ctx.is_empty() { String::new() } else { format!("对话历史：\n\n{}", history_ctx) },
+        question
     );
     let result = call_deepseek(client, api_key, QA_INTENT_PROMPT, &user_prompt).await?;
     let plan: QueryPlan = serde_json::from_value(result.value)
@@ -800,6 +805,7 @@ pub async fn generate_answer(
     overview: &UserOverview,
     replies: &[ReplyRow],
     posts: &[PostRow],
+    history_ctx: &str,
 ) -> Result<String> {
     let overview_text = overview.format();
     let context = format_query_results(replies, posts);
@@ -812,10 +818,30 @@ pub async fn generate_answer(
         context
     };
 
+    let history_block = if history_ctx.is_empty() {
+        String::new()
+    } else {
+        format!("对话历史：\n\n{}\n\n---\n\n", history_ctx)
+    };
+
     let user_prompt = format!(
-        "用户概览：\n\n{}\n\n---\n\n相关数据：\n\n{}\n\n---\n\n用户的问题是：{}\n\n请基于以上信息回答。",
-        overview_text, context, question
+        "{}用户概览：\n\n{}\n\n---\n\n相关数据：\n\n{}\n\n---\n\n用户的问题是：{}\n\n请基于以上信息回答。",
+        history_block, overview_text, context, question
     );
 
     call_deepseek_text(client, api_key, QA_ANSWER_PROMPT, &user_prompt).await
+}
+
+/// Format conversation history entries into a context string.
+pub fn format_history(history: &[crate::server::types::HistoryEntry]) -> String {
+    if history.is_empty() {
+        return String::new();
+    }
+    let mut s = String::new();
+    for (i, h) in history.iter().enumerate() {
+        let brief: String = h.answer.chars().take(80).collect();
+        let ellipsis = if h.answer.chars().count() > 80 { "..." } else { "" };
+        s.push_str(&format!("Q{}: {}\nA{}: {}{}\n\n", i + 1, h.question, i + 1, brief, ellipsis));
+    }
+    s
 }

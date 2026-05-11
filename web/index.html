@@ -1805,11 +1805,17 @@ createApp({
       qaHistory.value.push(entry);
       await nextTick();
 
+      // Build history from last 3 completed exchanges
+      const history = qaHistory.value
+        .filter(m => !m.thinking && !m.error && m.answer)
+        .slice(-3)
+        .map(m => ({ question: m.question, answer: m.answer }));
+
       try {
         const res = await fetch('/api/qa/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ euid: euid.value.trim(), question }),
+          body: JSON.stringify({ euid: euid.value.trim(), question, history }),
         });
 
         const data = await res.json();

@@ -18,6 +18,7 @@ pub async fn run_qa(
     api_key: &str,
     euid: &str,
     question: &str,
+    history: &[crate::server::types::HistoryEntry],
 ) -> anyhow::Result<QaResult> {
     // Step 1: Quick DB query for basic user context
     let conn = db::open_db(db_path)?;
@@ -87,8 +88,9 @@ pub async fn run_qa(
         user_ctx.push_str(&format!("\nAI画像摘要: {}\n", summary));
     }
 
-    // Step 2: AI intent recognition with user context
-    let plan = crate::deepseek::recognize_intent(http_client, api_key, question, &user_ctx).await?;
+    // Step 2: AI intent recognition with user context and history
+    let history_ctx = crate::deepseek::format_history(history);
+    let plan = crate::deepseek::recognize_intent(http_client, api_key, question, &user_ctx, &history_ctx).await?;
 
     // Step 3: Keyword search based on intent
     let search_replies_table = plan.search_tables.iter().any(|t| t == "replies");
@@ -169,7 +171,7 @@ pub async fn run_qa(
 
     // Step 4: AI generates the answer
     let answer = crate::deepseek::generate_answer(
-        http_client, api_key, question, &username, &overview, &replies, &posts,
+        http_client, api_key, question, &username, &overview, &replies, &posts, &history_ctx,
     ).await?;
 
     // Build prompt_detail for frontend display
@@ -183,7 +185,8 @@ pub async fn run_qa(
         plan.max_results,
     );
     let detail = format!(
-        "=== 用户上下文（用于意图识别）===\n{}\n\n=== 查询计划 ===\n{}\n\n=== 用户概览 ===\n{}\n\n=== 搜索结果（共{}条回帖 + {}条发帖）===\n{}",
+        "=== 对话历史 ===\n{}\n\n=== 用户上下文（用于意图识别）===\n{}\n\n=== 查询计划 ===\n{}\n\n=== 用户概览 ===\n{}\n\n=== 搜索结果（共{}条回帖 + {}条发帖）===\n{}",
+        if history_ctx.is_empty() { "(无)" } else { &history_ctx },
         user_ctx, search_summary, overview_text, replies.len(), posts.len(),
         crate::deepseek::format_query_results(&replies, &posts)
     );

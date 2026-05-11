@@ -726,6 +726,7 @@ pub async fn qa_ask(
         &cfg.deepseek_api_key,
         &body.euid,
         &body.question,
+        &body.history,
     )
     .await
     .map_err(|e| {

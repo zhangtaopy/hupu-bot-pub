@@ -183,6 +183,14 @@ pub struct EuidEntry {
 pub struct QaAskRequest {
     pub euid: String,
     pub question: String,
+    #[serde(default)]
+    pub history: Vec<HistoryEntry>,
+}
+
+#[derive(Deserialize)]
+pub struct HistoryEntry {
+    pub question: String,
+    pub answer: String,
 }
 
 #[derive(Serialize)]
