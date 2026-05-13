@@ -419,6 +419,26 @@ pub fn get_all_euids(conn: &Connection) -> Result<Vec<(String, String)>> {
     Ok(result)
 }
 
+pub fn get_username(conn: &Connection, euid: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT username FROM replies WHERE euid = ? LIMIT 1"
+    )?;
+    let result: Option<String> = stmt.query_row(rusqlite::params![euid], |row| {
+        row.get(0)
+    }).ok();
+    if result.is_some() {
+        return Ok(result);
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT username FROM posts WHERE euid = ? LIMIT 1"
+    )?;
+    let result: Option<String> = stmt.query_row(rusqlite::params![euid], |row| {
+        row.get(0)
+    }).ok();
+    Ok(result)
+}
+
 pub fn save_batch_error(
     conn: &Connection,
     euid: &str,
