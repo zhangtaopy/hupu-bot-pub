@@ -193,10 +193,3 @@ pub struct HistoryEntry {
     pub answer: String,
 }
 
-#[derive(Serialize)]
-pub struct QaAskResponse {
-    pub answer: String,
-    pub username: String,
-    pub euid: String,
-    pub prompt_detail: String,
-}

@@ -1,11 +1,6 @@
 use crate::db;
-use crate::deepseek::UserOverview;
-
-pub struct QaResult {
-    pub answer: String,
-    pub username: String,
-    pub prompt_detail: String,
-}
+use crate::deepseek::{UserOverview, AgentTrace};
+use std::collections::HashSet;
 
 struct UserContext {
     username: String,
@@ -18,47 +13,193 @@ struct UserContext {
     ai_reply_personal_info: Option<String>,
 }
 
-/// 4-step Q&A flow:
-///   1. Quick DB query → basic user stats + existing AI analysis
-///   2. AI intent recognition (with user context) → query plan
-///   3. Execute keyword search on DB + build full overview
-///   4. AI generates answer from overview and query results
-pub async fn run_qa(
+// ── SSE event helpers ──
+
+fn sse_round_event(trace: &AgentTrace) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "type": "round",
+        "round": trace.round,
+        "action": trace.action,
+        "keywords": trace.keywords,
+        "search_tables": trace.search_tables,
+        "reply_count": trace.reply_count,
+        "post_count": trace.post_count,
+        "reasoning": trace.reasoning,
+        "summary_html": trace.format_md(),
+    })).unwrap_or_default()
+}
+
+fn sse_answer_event(answer: &str, username: &str, detail: &str) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "type": "answer",
+        "answer": answer,
+        "username": username,
+        "prompt_detail": detail,
+    })).unwrap_or_default()
+}
+
+// ── Public API ──
+
+/// Streaming: sends NDJSON events through the channel as each round completes.
+pub async fn run_qa_streaming(
     db_path: &std::path::Path,
     http_client: &reqwest::Client,
     api_key: &str,
     euid: &str,
     question: &str,
     history: &[crate::server::types::HistoryEntry],
-) -> anyhow::Result<QaResult> {
-    let conn = db::open_db(db_path)?;
-
-    // Step 1: Load user context from DB
-    let ctx = load_user_context(&conn, euid)?;
-
-    // Step 2: AI intent recognition with user context and history
+    event_tx: &tokio::sync::mpsc::Sender<String>,
+) -> anyhow::Result<()> {
+    let ctx = {
+        let conn = db::open_db(db_path)?;
+        load_user_context(&conn, euid)?
+    };
     let history_ctx = crate::deepseek::format_history(history);
-    let plan = crate::deepseek::recognize_intent(
-        http_client, api_key, question, &ctx.user_ctx_text, &history_ctx,
+
+    let (answer, traces) = agent_loop(
+        db_path, http_client, api_key, question, euid, &ctx, &history_ctx, Some(event_tx),
     ).await?;
 
-    // Step 3: Execute keyword search and build user overview
-    let (replies, posts, overview) = search_and_build_overview(
-        &conn, euid, &plan, ctx.reply_count, ctx.post_count,
-        ctx.topic_vec, ctx.ai_reply_summary, ctx.ai_post_summary, ctx.ai_reply_personal_info,
-    )?;
+    let detail = build_prompt_detail(&traces, &ctx.user_ctx_text);
+    let _ = event_tx.send(sse_answer_event(&answer, &ctx.username, &detail)).await;
 
-    // Step 4: AI generates the answer
-    let answer = crate::deepseek::generate_answer(
-        http_client, api_key, question, &ctx.username, &overview, &replies, &posts, &history_ctx,
-    ).await?;
-
-    let detail = build_prompt_detail(&ctx.user_ctx_text, &plan, &overview, &replies, &posts);
-
-    Ok(QaResult { answer, username: ctx.username, prompt_detail: detail })
+    Ok(())
 }
 
-// ── Step 1: Load user context from DB ──
+// ── Core agent loop ──
+
+async fn agent_loop(
+    db_path: &std::path::Path,
+    http_client: &reqwest::Client,
+    api_key: &str,
+    question: &str,
+    euid: &str,
+    ctx: &UserContext,
+    history_ctx: &str,
+    event_tx: Option<&tokio::sync::mpsc::Sender<String>>,
+) -> anyhow::Result<(String, Vec<AgentTrace>)> {
+    let mut all_replies: Vec<crate::replies::ReplyRow> = Vec::new();
+    let mut all_posts: Vec<crate::posts::PostRow> = Vec::new();
+    let mut seen_reply_pids: HashSet<i64> = HashSet::new();
+    let mut seen_post_tids: HashSet<i64> = HashSet::new();
+    let mut traces: Vec<AgentTrace> = Vec::new();
+    let mut previous_rounds_text = String::new();
+    let mut final_answer = String::new();
+
+    let max_rounds = 5;
+    for round in 1..=max_rounds {
+        let action = crate::deepseek::agent_decide(
+            http_client, api_key, question, &ctx.user_ctx_text, history_ctx,
+            &previous_rounds_text, round,
+        ).await?;
+
+        if action.action == "final_answer" {
+            final_answer = action.answer;
+            let trace = AgentTrace {
+                round,
+                action: "给出最终回答".into(),
+                reasoning: String::new(),
+                keywords: vec![],
+                search_tables: vec![],
+                reply_count: all_replies.len(),
+                post_count: all_posts.len(),
+            };
+            emit(event_tx, &sse_round_event(&trace)).await;
+            traces.push(trace);
+            break;
+        }
+
+        // Execute search — open/close connection only for DB operations
+        let (round_replies, round_posts) = {
+            let conn = db::open_db(db_path)?;
+            let search_replies = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "replies");
+            let search_posts = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "posts");
+
+            let round_replies = if search_replies && !action.keywords.is_empty() {
+                db::search_replies(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
+            } else {
+                Vec::new()
+            };
+
+            let round_posts = if search_posts && !action.keywords.is_empty() {
+                db::search_posts(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
+            } else {
+                Vec::new()
+            };
+            (round_replies, round_posts)
+        }; // conn dropped here
+
+        let new_reply_count = round_replies.iter().filter(|r| !seen_reply_pids.contains(&r.pid)).count();
+        let new_post_count = round_posts.iter().filter(|p| !seen_post_tids.contains(&p.tid)).count();
+
+        for r in &round_replies {
+            if seen_reply_pids.insert(r.pid) {
+                all_replies.push(r.clone());
+            }
+        }
+        for p in &round_posts {
+            if seen_post_tids.insert(p.tid) {
+                all_posts.push(p.clone());
+            }
+        }
+
+        let round_summary = crate::deepseek::format_search_results_summary(&round_replies, &round_posts);
+        previous_rounds_text.push_str(&format!(
+            "=== 第{}轮搜索 (关键词: {}) ===\n{}\n\n",
+            round,
+            action.keywords.join("、"),
+            round_summary,
+        ));
+
+        let trace = AgentTrace {
+            round,
+            action: "搜索".into(),
+            reasoning: action.reasoning,
+            keywords: action.keywords,
+            search_tables: action.search_tables,
+            reply_count: new_reply_count,
+            post_count: new_post_count,
+        };
+        emit(event_tx, &sse_round_event(&trace)).await;
+        traces.push(trace);
+    }
+
+    if final_answer.is_empty() {
+        let overview = {
+            let conn = db::open_db(db_path)?;
+            build_overview(
+                &conn, euid, ctx.reply_count, ctx.post_count,
+                ctx.topic_vec.clone(), ctx.ai_reply_summary.clone(),
+                ctx.ai_post_summary.clone(), ctx.ai_reply_personal_info.clone(),
+            )?
+        };
+        final_answer = crate::deepseek::generate_answer(
+            http_client, api_key, question, &ctx.username, &overview,
+            &all_replies, &all_posts, history_ctx,
+        ).await?;
+        let trace = AgentTrace {
+            round: max_rounds + 1,
+            action: "达到最大轮数，综合所有结果给出最终回答".into(),
+            reasoning: String::new(),
+            keywords: vec![],
+            search_tables: vec![],
+            reply_count: all_replies.len(),
+            post_count: all_posts.len(),
+        };
+        emit(event_tx, &sse_round_event(&trace)).await;
+        traces.push(trace);
+    }
+
+    Ok((final_answer, traces))
+}
+
+async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) {
+    if let Some(tx) = tx {
+        let _ = tx.send(data.to_string()).await;
+    }
+}
+
+// ── Load user context ──
 
 fn load_user_context(conn: &rusqlite::Connection, euid: &str) -> anyhow::Result<UserContext> {
     let reply_count = db::count_replies(conn, Some(euid))?;
@@ -147,42 +288,22 @@ fn build_user_ctx_text(
     text
 }
 
-// ── Step 3: Keyword search + overview ──
-
-fn search_and_build_overview(
+fn build_overview(
     conn: &rusqlite::Connection,
     euid: &str,
-    plan: &crate::deepseek::QueryPlan,
     reply_count: i64,
     post_count: i64,
     topic_vec: Vec<(String, usize)>,
     ai_reply_summary: Option<String>,
     ai_post_summary: Option<String>,
     ai_reply_personal_info: Option<String>,
-) -> anyhow::Result<(Vec<crate::replies::ReplyRow>, Vec<crate::posts::PostRow>, UserOverview)> {
-    let search_replies_table = plan.search_tables.iter().any(|t| t == "replies");
-    let search_posts_table = plan.search_tables.iter().any(|t| t == "posts");
-    let search_replies = plan.search_tables.is_empty() || search_replies_table;
-    let search_posts = plan.search_tables.is_empty() || search_posts_table;
-
-    let replies = if search_replies && !plan.search_keywords.is_empty() {
-        db::search_replies(conn, euid, &plan.search_keywords, &plan.topic_filter, &plan.sort_by, plan.max_results)?
-    } else {
-        Vec::new()
-    };
-
-    let posts = if search_posts && !plan.search_keywords.is_empty() {
-        db::search_posts(conn, euid, &plan.search_keywords, &plan.topic_filter, &plan.sort_by, plan.max_results)?
-    } else {
-        Vec::new()
-    };
-
+) -> anyhow::Result<UserOverview> {
     let time_vec: Vec<(String, usize)> = db::query_time_distribution(conn, euid)
         .unwrap_or_default()
         .into_iter()
         .collect();
 
-    let overview = UserOverview {
+    Ok(UserOverview {
         total_replies: reply_count,
         total_posts: post_count,
         topic_distribution: topic_vec,
@@ -191,9 +312,7 @@ fn search_and_build_overview(
         ai_reply_analysis_summary: ai_reply_summary,
         ai_post_analysis_summary: ai_post_summary,
         ai_reply_personal_info,
-    };
-
-    Ok((replies, posts, overview))
+    })
 }
 
 fn compute_activity_period(conn: &rusqlite::Connection, euid: &str) -> Option<String> {
@@ -234,28 +353,15 @@ fn compute_activity_period(conn: &rusqlite::Connection, euid: &str) -> Option<St
     }
 }
 
-// ── Step 4: Build prompt detail ──
+fn build_prompt_detail(traces: &[AgentTrace], user_ctx_text: &str) -> String {
+    let trace_text: String = traces.iter()
+        .map(|t| t.format_md())
+        .collect::<Vec<_>>()
+        .join("\n");
 
-fn build_prompt_detail(
-    user_ctx_text: &str,
-    plan: &crate::deepseek::QueryPlan,
-    overview: &UserOverview,
-    replies: &[crate::replies::ReplyRow],
-    posts: &[crate::posts::PostRow],
-) -> String {
-    let overview_text = overview.format();
-    let search_summary = format!(
-        "搜索关键词: {}\n搜索表: {}\n板块过滤: {}\n排序: {}\n最多结果: {}",
-        plan.search_keywords.join("、"),
-        plan.search_tables.join("、"),
-        if plan.topic_filter.is_empty() { "无".into() } else { plan.topic_filter.join("、") },
-        &plan.sort_by,
-        plan.max_results,
-    );
     format!(
-        "=== 用户上下文（用于意图识别）===\n{}\n\n=== 查询计划 ===\n{}\n\n=== 用户概览 ===\n{}\n\n=== 搜索结果（共{}条回帖 + {}条发帖）===\n{}",
-        user_ctx_text, search_summary, overview_text, replies.len(), posts.len(),
-        crate::deepseek::format_query_results(replies, posts)
+        "=== 用户上下文 ===\n{}\n\n=== Agent决策过程 ===\n{}",
+        user_ctx_text, trace_text
     )
 }
 

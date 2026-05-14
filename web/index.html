@@ -1081,17 +1081,38 @@
             <p class="text-sm text-white">{{ msg.question }}</p>
           </div>
         </div>
-        <!-- AI Answer -->
+        <!-- AI Answer Area -->
         <div class="flex justify-start">
           <div class="max-w-[85%] bg-white/80 backdrop-blur-sm rounded-2xl rounded-bl-md px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100">
             <div class="flex items-center gap-2 mb-2">
-              <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white shadow-sm" style="background: linear-gradient(135deg, #10b981, #059669);">AI</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white shadow-sm" :class="msg.thinking ? 'bg-amber-400' : ''" :style="msg.thinking ? '' : 'background: linear-gradient(135deg, #10b981, #059669);'">AI</span>
               <span class="text-xs text-gray-400">{{ msg.time }}</span>
             </div>
-            <div v-if="msg.thinking" class="thinking-dots text-sm text-gray-500 font-medium">
+            <!-- Round traces (shown in real-time as they arrive) -->
+            <div v-if="msg.rounds && msg.rounds.length" class="space-y-2 mb-3">
+              <div v-for="(r, ri) in msg.rounds" :key="ri">
+                <details :open="ri === msg.rounds.length - 1" class="group">
+                  <summary class="cursor-pointer text-sm text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-1.5 py-1">
+                    <svg class="w-3.5 h-3.5 transition-transform duration-200 group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    <span v-if="r.action === '搜索'" class="text-emerald-600 font-medium">🔍 第{{ r.round }}轮检索</span>
+                    <span v-else class="text-indigo-600 font-medium">💬 第{{ r.round }}轮</span>
+                    <span v-if="r.keywords && r.keywords.length" class="text-gray-400 text-xs ml-1 truncate max-w-[200px]">关键词：{{ r.keywords.join('、') }}</span>
+                  </summary>
+                  <div class="mt-2 pl-5 text-xs text-gray-500 space-y-1 border-l-2 border-gray-100">
+                    <div v-if="r.reasoning" class="text-gray-600 italic">> {{ r.reasoning }}</div>
+                    <div>📊 本轮回帖：{{ r.reply_count }} 条</div>
+                    <div>📊 本轮发帖：{{ r.post_count }} 条</div>
+                    <div v-if="r.search_tables && r.search_tables.length">📁 搜索表：{{ r.search_tables.join('、') }}</div>
+                  </div>
+                </details>
+              </div>
+            </div>
+            <!-- Thinking dots -->
+            <div v-if="msg.thinking && !msg.answer" class="thinking-dots text-sm text-gray-500 font-medium">
               <span>.</span><span>.</span><span>.</span>
             </div>
-            <div v-else class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ msg.answer }}</div>
+            <!-- Final Answer -->
+            <div v-if="msg.answer" class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ msg.answer }}</div>
             <div v-if="msg.error" class="text-sm text-rose-600 mt-1">{{ msg.error }}</div>
             <!-- Prompt detail toggle -->
             <div v-if="!msg.thinking && msg.promptDetail" class="mt-2 border-t border-gray-100 pt-2">
@@ -1800,10 +1821,8 @@ createApp({
       const now = new Date();
       const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
 
-      // Immediately show question with thinking state
-      const entry = { question, answer: '', time, error: null, thinking: true, promptDetail: '', showDetail: false };
+      const entry = reactive({ question, answer: '', time, error: null, thinking: true, rounds: [], promptDetail: '', showDetail: false });
       qaHistory.value.push(entry);
-      await nextTick();
 
       // Build history from last 3 completed exchanges
       const history = qaHistory.value
@@ -1818,17 +1837,57 @@ createApp({
           body: JSON.stringify({ euid: euid.value.trim(), question, history }),
         });
 
-        const data = await res.json();
-
         if (!res.ok) {
-          throw new Error(data.error || `请求失败 (HTTP ${res.status})`);
+          const text = await res.text();
+          throw new Error(text || `请求失败 (HTTP ${res.status})`);
         }
 
-        if (data.username) {
-          qaUsername.value = data.username;
+        // Read stream line by line
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // keep incomplete last line in buffer
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const event = JSON.parse(line);
+
+              if (event.type === 'round') {
+                entry.rounds.push({
+                  round: event.round,
+                  action: event.action,
+                  keywords: event.keywords || [],
+                  search_tables: event.search_tables || [],
+                  reply_count: event.reply_count || 0,
+                  post_count: event.post_count || 0,
+                  reasoning: event.reasoning || '',
+                });
+                await nextTick(); // force Vue to re-render immediately
+              } else if (event.type === 'answer') {
+                entry.thinking = false;
+                entry.answer = event.answer || '';
+                entry.promptDetail = event.prompt_detail || '';
+                if (event.username) qaUsername.value = event.username;
+              } else if (event.type === 'error') {
+                entry.thinking = false;
+                entry.error = event.error || '未知错误';
+                qaError.value = event.error || '未知错误';
+              }
+            } catch (e) {
+              console.warn('解析流事件失败:', line, e);
+            }
+          }
         }
 
-        // Query stats for user info
+        // Stats query (non-blocking)
         try {
           const statsRes = await fetch(`/api/stats?euid=${encodeURIComponent(euid.value)}`);
           if (statsRes.ok) {
@@ -1840,14 +1899,7 @@ createApp({
             const postsData = await postsRes.json();
             qaPostCount.value = postsData.total || 0;
           }
-        } catch (e) {
-          // ignore stats errors
-        }
-
-        // Update the entry with actual answer
-        entry.thinking = false;
-        entry.answer = data.answer;
-        entry.promptDetail = data.prompt_detail || '';
+        } catch (e) { /* ignore */ }
       } catch (e) {
         entry.thinking = false;
         entry.error = e.message || '问答请求失败';

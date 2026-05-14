@@ -75,63 +75,65 @@ const SYNTHESIS_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户画像专
   "summary": "200-300字的综合评语,评论可以激烈一点，可以不留情面，但要基于分析结果，不能无中生有。"
 }"#;
 
-// ── Q&A: Intent recognition prompt ──
+// ── Agent multi-round structures ──
 
-const QA_INTENT_PROMPT: &str = r#"你是一个搜索关键词生成专家。你需要理解用户想了解什么信息，然后生成能在数据库中找到答案的搜索关键词。
+fn default_sort() -> String { "relevance".into() }
+fn default_max_results() -> usize { 50 }
 
-数据库有两张表，存储用户的历史发帖和回帖：
-- replies: content(回帖内容), title(帖子标题), topic_name(板块名), create_time(时间戳), light_count(点亮数)
-- posts: title(帖子标题), summary(帖子摘要), topic_name(板块名), forum_name(分区名), create_time(时间戳), replies(回复数), visits(浏览数), lights(点亮数)
+const QA_ANSWER_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。根据用户概览、搜索结果和提问者的问题，给出自然友好的回答。
 
-每次你会收到该用户已有的基础信息（统计数据、已推断的个人信息、AI画像摘要等），请充分利用这些信息生成更精准的搜索关键词。
+重要：你分析的对象是"用户概览"中的人，不是提问者。永远用第三人称（他/她/用户名）来描述分析对象，不要用"你"来称呼他。
 
-核心原则：
-- 如果已知信息中有地点相关线索（如籍贯、现居城市），把具体地名加入关键词
-- 如果已知信息中有兴趣爱好线索（如主队、游戏），把相关词汇加入关键词
-- 不要用代词（他、她、我、你）和疑问词（哪里、什么、怎么、为什么）做关键词
-- 不要用"推断""依据""分析""评价"等元词汇做关键词
-- 要结合已知信息，推测该用户可能说过什么内容
+要求：
+1. 充分利用用户概览中的统计数据和AI分析结果
+2. 结合搜索结果中的具体内容作为佐证
+3. 基于数据实事求是地回答，不要编造信息
+4. 如果数据中没有相关信息，明确说明"根据现有数据无法判断"
+5. 回答风格自然、友好，像在和用户聊天"#;
 
-示例：
-- 已知籍贯:湖南株洲/现居:广东珠海，问"他是哪里人" → 关键词: ["株洲", "湖南", "珠海", "广东", "老家", "家乡", "本地人", "住在"]
-- 已知主队:湖人，问"他喜欢什么球队" → 关键词: ["湖人", "NBA", "主队", "球迷", "勇士", "篮球", "季后赛"]
-- 已知职业:程序员，问"做什么工作" → 关键词: ["程序员", "代码", "加班", "互联网", "公司", "上班", "工资"]
-- 问"开什么车" → 关键词: ["买车", "提车", "开车", "油耗", "4S", "保养", "驾照"]
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentTrace {
+    pub round: usize,
+    pub action: String,
+    pub reasoning: String,
+    pub keywords: Vec<String>,
+    pub search_tables: Vec<String>,
+    pub reply_count: usize,
+    pub post_count: usize,
+}
 
-输出规则：
-1. search_keywords: 8个以内，优先包含已知信息中的具体词汇，不要代词/疑问词/元词汇
-2. search_tables: ["replies"] 或 ["posts"] 或 ["replies","posts"]。一般问题查 replies，发帖风格类问题查 posts，不确定就两个都查
-3. topic_filter: 如果问题明显偏向某类板块才填（如篮球→["NBA","篮球","CBA"]），否则空数组
-4. sort_by: 一般用 "relevance"，时间类问题用 "create_time"，热度类问题用 "light_count"
-5. max_results: 一般50，需要大量样本时用80-100
-
-输出严格json格式，不要包含其他文字。"#;
-
-// ── Q&A: Answer generation prompt ──
-
-const QA_ANSWER_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你会收到以下信息：
-
-1. 对话历史（可选）：之前几轮问答的简要记录，帮助你理解追问的上下文
-2. 用户概览：包含该用户的统计数据、板块分布、以及已有的AI分析结果（用户画像、个人信息推断等）
-3. 相关数据：根据用户问题从数据库中查询到的相关回帖和发帖
-4. 用户的问题
-
-根据以上信息回答用户的问题。要求：
-1. 如果提供了对话历史，注意理解追问的上下文（如"那"、"他"等指代可能指向之前讨论的内容）
-2. 充分利用"用户概览"中的统计数据和AI分析结果，特别是已有的用户画像和个人信息推断
-3. 结合"相关数据"中的具体内容作为佐证
-4. 基于数据实事求是地回答，不要编造信息
-5. 如果数据中没有相关信息，明确说明"根据现有数据无法判断"
-6. 回答要具体，引用相关的数据和分析结果作为依据
-7. 回答风格自然、友好，像在和用户聊天
-8. 不需要提到"根据查询结果"等元描述，直接回答即可"#;
-
-// ── Q&A data structures ──
+impl AgentTrace {
+    pub fn format_md(&self) -> String {
+        if self.keywords.is_empty() {
+            // Non-search action (final answer, forced summary, etc.)
+            format!(
+                "<details>\n<summary>💬 第{}轮：{}</summary>\n\n- 累计回帖: {} 条\n- 累计发帖: {} 条\n</details>",
+                self.round,
+                self.action,
+                self.reply_count,
+                self.post_count,
+            )
+        } else {
+            let tables = if self.search_tables.is_empty() { "全部".into() } else { self.search_tables.join("、") };
+            format!(
+                "<details>\n<summary>🔍 第{}轮：{} | 搜索表: {} | 关键词: {}</summary>\n\n> {}\n\n- 本轮回帖: {} 条\n- 本轮发帖: {} 条\n</details>",
+                self.round,
+                self.action,
+                tables,
+                self.keywords.join("、"),
+                self.reasoning,
+                self.reply_count,
+                self.post_count,
+            )
+        }
+    }
+}
 
 #[derive(Deserialize, Debug)]
-pub struct QueryPlan {
+pub struct AgentAction {
+    pub action: String,
     #[serde(default)]
-    pub search_keywords: Vec<String>,
+    pub keywords: Vec<String>,
     #[serde(default)]
     pub search_tables: Vec<String>,
     #[serde(default)]
@@ -140,10 +142,119 @@ pub struct QueryPlan {
     pub sort_by: String,
     #[serde(default = "default_max_results")]
     pub max_results: usize,
+    #[serde(default)]
+    pub reasoning: String,
+    #[serde(default)]
+    pub answer: String,
 }
 
-fn default_sort() -> String { "relevance".into() }
-fn default_max_results() -> usize { 50 }
+const QA_AGENT_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你的任务是通过多轮数据库搜索，逐步收集信息，最终回答提问者关于某个用户的的问题。
+
+## 关键规则
+
+你分析的对象是"用户基本信息"中的那个用户，不是提问者。在 final_answer 中：
+- 永远用第三人称（他/她/用户名）来描述分析对象
+- 禁止用"你"来称呼分析对象，因为提问者和分析对象是不同的人
+
+## 工作方式
+
+你会收到分析对象的基本信息（统计数据、AI画像等）和提问者的问题。你可以进行多轮搜索，每轮用不同的关键词从不同角度查找信息。
+
+每次你必须输出一个 JSON 对象，包含以下字段之一：
+
+### 搜索操作
+当需要更多信息时输出：
+{"action":"search","keywords":["关键词1","关键词2"],"search_tables":["replies"],"topic_filter":[],"sort_by":"relevance","max_results":50,"reasoning":"为什么需要这轮搜索的简短说明"}
+
+### 最终回答
+当已收集足够信息或无法获取更多时输出：
+{"action":"final_answer","answer":"你的完整回答（用第三人称描述分析对象）"}
+
+## 数据库说明
+
+- replies 表: content(回帖内容), title(帖子标题), topic_name(板块名), create_time(时间戳), light_count(点亮数)
+- posts 表: title(帖子标题), summary(帖子摘要), topic_name(板块名), forum_name(分区名), create_time(时间戳), replies(回复数), visits(浏览数), lights(点亮数)
+
+## 搜索策略
+
+1. 第一轮：根据已知信息和问题生成精准的关键词，广泛搜索
+2. 后续轮次：如果已有结果不够或方向不对，换角度、换关键词
+3. 如果连续搜索都找不到相关信息，承认"根据现有数据无法判断"并结束
+4. search_tables 可选: ["replies"]、["posts"] 或 ["replies","posts"]
+5. sort_by: "relevance" 用于相关性，"create_time" 用于时间顺序，"light_count" 用于热度
+6. max_results: 通常 50，特别需要大量样本时用 80-100
+7. topic_filter: 空数组表示不过滤板块，否则填入板块名
+
+## 核心原则
+
+- 每个 reasoning 要简短说明为什么选这些关键词
+- 如果已有结果已经能充分回答问题，立即输出 final_answer
+- 不要超过 5 轮搜索
+- 回答要基于数据，引用具体内容作为佐证
+- 回答风格自然友好，像在聊天"#;
+
+pub async fn agent_decide(
+    client: &reqwest::Client,
+    api_key: &str,
+    question: &str,
+    user_ctx: &str,
+    history_ctx: &str,
+    previous_rounds: &str,
+    round: usize,
+) -> Result<AgentAction> {
+    let history_block = if history_ctx.is_empty() {
+        String::new()
+    } else {
+        format!("对话历史：\n\n{}\n\n---\n\n", history_ctx)
+    };
+
+    let previous_block = if previous_rounds.is_empty() {
+        String::new()
+    } else {
+        format!("前几轮搜索结果：\n\n{}\n\n---\n\n", previous_rounds)
+    };
+
+    let user_prompt = format!(
+        "{}以下是你要分析的用户的基本信息（注意：这是分析对象，不是提问者）：\n\n{}\n\n---\n\n{}提问者的问题是：{}\n\n---\n\n当前是第 {} 轮。请决定下一步操作。",
+        history_block, user_ctx, previous_block, question, round
+    );
+
+    let result = call_deepseek(client, api_key, QA_AGENT_PROMPT, &user_prompt).await?;
+    let action: AgentAction = serde_json::from_value(result.value)
+        .map_err(|e| anyhow::anyhow!("解析Agent决策失败: {}，原始: {}", e, result.raw_content))?;
+    Ok(action)
+}
+
+pub fn format_search_results_summary(replies: &[ReplyRow], posts: &[PostRow]) -> String {
+    let mut s = String::new();
+    if !posts.is_empty() {
+        s.push_str(&format!("发帖命中 {} 条:\n", posts.len()));
+        for (i, p) in posts.iter().enumerate() {
+            s.push_str(&format!("  {}. [{}] {} ({}回复/{}亮)\n",
+                i + 1, p.topic_name, p.title, p.replies, p.lights));
+            if !p.summary.is_empty() {
+                let brief: String = p.summary.chars().take(120).collect();
+                s.push_str(&format!("     {}\n", brief));
+            }
+        }
+    }
+    if !replies.is_empty() {
+        s.push_str(&format!("回帖命中 {} 条:\n", replies.len()));
+        for (i, r) in replies.iter().enumerate() {
+            let brief: String = r.content.chars().take(150).collect();
+            s.push_str(&format!("  {}. [{}] {} ({})\n",
+                i + 1,
+                r.topic_name.as_deref().unwrap_or("未知"),
+                r.title,
+                brief,
+            ));
+        }
+    }
+    if s.is_empty() {
+        s = String::from("(无结果)");
+    }
+    s
+}
 
 // ── Post analysis prompts ──
 
@@ -685,28 +796,6 @@ pub async fn synthesize_post_results(
     Ok(analysis)
 }
 
-// ── Q&A: 3-step flow ──
-
-/// Step 1: AI analyzes the question and returns a query plan.
-pub async fn recognize_intent(
-    client: &reqwest::Client,
-    api_key: &str,
-    question: &str,
-    user_ctx: &str,
-    history_ctx: &str,
-) -> Result<QueryPlan> {
-    let user_prompt = format!(
-        "已知该用户的基础信息：\n\n{}\n\n{}\n\n用户的问题是：{}\n\n请根据用户已有信息、对话历史和问题，生成用于搜索相关内容的查询计划json。",
-        user_ctx,
-        if history_ctx.is_empty() { String::new() } else { format!("对话历史：\n\n{}", history_ctx) },
-        question
-    );
-    let result = call_deepseek(client, api_key, QA_INTENT_PROMPT, &user_prompt).await?;
-    let plan: QueryPlan = serde_json::from_value(result.value)
-        .map_err(|e| anyhow::anyhow!("解析查询计划失败: {}，原始: {}", e, result.raw_content))?;
-    Ok(plan)
-}
-
 /// Format query results into a context string for the AI.
 pub fn format_query_results(replies: &[ReplyRow], posts: &[PostRow]) -> String {
     let mut ctx = String::new();
@@ -825,7 +914,7 @@ pub async fn generate_answer(
     };
 
     let user_prompt = format!(
-        "{}用户概览：\n\n{}\n\n---\n\n相关数据：\n\n{}\n\n---\n\n用户的问题是：{}\n\n请基于以上信息回答。",
+        "{}以下是分析对象的概览数据：\n\n{}\n\n---\n\n相关数据：\n\n{}\n\n---\n\n提问者的问题是：{}\n\n请基于以上信息回答（用第三人称描述分析对象）。",
         history_block, overview_text, context, question
     );
 

@@ -21,6 +21,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 jieba-rs = "0.7"
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
+tokio-stream = "0.1"
 dirs = "6"
 
 [target.'cfg(windows)'.dependencies]

@@ -1,9 +1,13 @@
 use axum::{
     extract::Query,
     http::StatusCode,
-    response::{Html, Json},
+    response::{Html, Json, Response},
+    body::{Body, Bytes},
 };
+use std::convert::Infallible;
 use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 
 use super::types::*;
 
@@ -695,51 +699,52 @@ pub async fn get_all_euids(
 pub async fn qa_ask(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     axum::extract::Json(body): axum::extract::Json<QaAskRequest>,
-) -> Result<Json<QaAskResponse>, (StatusCode, Json<serde_json::Value>)> {
-    let cfg = match crate::config::try_get() {
-        Some(cfg) => cfg,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "请先配置 Cookie"})),
-            ));
+) -> Response {
+    let (tx, rx) = mpsc::channel::<String>(16);
+
+    let validation_err: Option<String> = match crate::config::try_get() {
+        None => Some("请先配置 Cookie".into()),
+        Some(c) if c.deepseek_api_key.is_empty() => Some("未配置 DeepSeek API Key".into()),
+        _ if body.question.trim().is_empty() => Some("问题不能为空".into()),
+        Some(c) => {
+            let db_path = state.db_path.clone();
+            let http_client = state.http_client.clone();
+            let api_key = c.deepseek_api_key.clone();
+            let question = body.question;
+            let euid = body.euid;
+            let history = body.history;
+            let tx_agent = tx.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = crate::services::qa::run_qa_streaming(
+                    &db_path, &http_client, &api_key, &euid, &question, &history, &tx_agent,
+                ).await {
+                    let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
+                        "type": "error", "error": e.to_string()
+                    })).unwrap_or_default()).await;
+                }
+            });
+            None
         }
     };
 
-    if cfg.deepseek_api_key.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "未配置 DeepSeek API Key，请在 config.json 中添加 deepseek_api_key"})),
-        ));
+    if let Some(err) = validation_err {
+        let tx_err = tx.clone();
+        tokio::spawn(async move {
+            let _ = tx_err.send(serde_json::to_string(&serde_json::json!({
+                "type": "error", "error": err
+            })).unwrap_or_default()).await;
+        });
     }
 
-    if body.question.trim().is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "问题不能为空"})),
-        ));
-    }
+    let stream = ReceiverStream::new(rx).map(|data| {
+        Ok::<_, Infallible>(Bytes::from(format!("{}\n", data)))
+    });
 
-    let result = crate::services::qa::run_qa(
-        &state.db_path,
-        &state.http_client,
-        &cfg.deepseek_api_key,
-        &body.euid,
-        &body.question,
-        &body.history,
-    )
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-    })?;
-
-    Ok(Json(QaAskResponse {
-        answer: result.answer,
-        username: result.username,
-        euid: body.euid,
-        prompt_detail: result.prompt_detail,
-    }))
+    Response::builder()
+        .header("Content-Type", "application/x-ndjson")
+        .header("Cache-Control", "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(Body::from_stream(stream))
+        .unwrap()
 }
