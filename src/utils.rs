@@ -68,24 +68,48 @@ pub fn find_matching_brace(s: &str, start: usize) -> Option<usize> {
 /// Fix unescaped control characters inside JSON string values.
 /// LLMs sometimes emit literal \n \r \t inside strings instead of \\n \\r \\t.
 pub fn sanitize_json(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
     let mut result = String::with_capacity(s.len());
     let mut in_string = false;
     let mut escape = false;
 
-    for ch in s.chars() {
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
         if escape {
             escape = false;
             result.push(ch);
+            i += 1;
             continue;
         }
         if ch == '\\' && in_string {
             escape = true;
             result.push('\\');
+            i += 1;
             continue;
         }
         if ch == '"' {
-            in_string = !in_string;
-            result.push('"');
+            if !in_string {
+                in_string = true;
+                result.push('"');
+            } else {
+                // Peek at the next non-whitespace char to decide if this
+                // quote is a structural delimiter (key/value end) or an
+                // unescaped embedded quote that needs escaping.
+                let mut j = i + 1;
+                while j < len && chars[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                let next_ch = if j < len { chars[j] } else { '\0' };
+                if matches!(next_ch, ':' | ',' | '}' | ']' | '\0') {
+                    in_string = false;
+                    result.push('"');
+                } else {
+                    result.push_str("\\\"");
+                }
+            }
+            i += 1;
             continue;
         }
         if in_string {
@@ -99,6 +123,7 @@ pub fn sanitize_json(s: &str) -> String {
         } else {
             result.push(ch);
         }
+        i += 1;
     }
 
     result

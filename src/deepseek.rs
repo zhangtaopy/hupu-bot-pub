@@ -192,7 +192,8 @@ const QA_AGENT_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。�
 - 如果已有结果已经能充分回答问题，立即输出 final_answer
 - 不要超过 5 轮搜索
 - 回答要基于数据，引用具体内容作为佐证
-- 回答风格自然友好，像在聊天"#;
+- 回答风格自然友好，像在聊天
+- 在 final_answer 的 answer 字段中引用原文或描述时，使用中文引号""而不是英文引号""，以确保JSON格式正确"#;
 
 pub async fn agent_decide(
     client: &reqwest::Client,
