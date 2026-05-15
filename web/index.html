@@ -366,6 +366,24 @@
     </div>
   </div>
 
+  <!-- ── Progress: Fetch Replies ── -->
+  <div v-if="fetchRepliesLoading" class="max-w-6xl mx-auto px-4 mt-4">
+    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
+      <div class="flex items-center justify-between mb-2.5">
+        <span class="text-sm font-medium text-gray-700">{{ fetchRepliesProgressPhase || '获取回帖准备中' }}</span>
+        <span v-if="fetchRepliesProgressTotal > 0" class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+          {{ fetchRepliesProgressCurrent.toLocaleString() }} / {{ fetchRepliesProgressTotal.toLocaleString() }}
+        </span>
+      </div>
+      <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+        <div v-if="fetchRepliesProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
+          style="background: linear-gradient(90deg, #10b981, #34d399);"
+          :style="{ width: (fetchRepliesProgressCurrent / fetchRepliesProgressTotal * 100) + '%' }"></div>
+        <div v-else class="h-2 rounded-full shimmer-bar" style="background: linear-gradient(90deg, #10b981, #34d399); width: 35%"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Progress: AI Post Analysis ── -->
   <div v-if="aiPostLoading" class="max-w-6xl mx-auto px-4 mt-4">
     <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
@@ -1245,6 +1263,10 @@ createApp({
     const fetchPostsProgressTotal = ref(0);
     const fetchPostsLoading = ref(false);
     let fetchPostsPollTimer = null;
+    const fetchRepliesProgressPhase = ref('');
+    const fetchRepliesProgressCurrent = ref(0);
+    const fetchRepliesProgressTotal = ref(0);
+    const fetchRepliesLoading = ref(false);
 
     // Posts state
     const postsData = ref([]);
@@ -2120,6 +2142,11 @@ createApp({
       fetchPostsProgressCurrent.value = 0;
       fetchPostsProgressTotal.value = 0;
 
+      fetchRepliesLoading.value = true;
+      fetchRepliesProgressPhase.value = '开始获取回帖';
+      fetchRepliesProgressCurrent.value = 0;
+      fetchRepliesProgressTotal.value = 0;
+
       let postsDone = false;
       let postsError = null;
 
@@ -2181,10 +2208,15 @@ createApp({
             const res = await fetch(`/api/replies/fetch-progress?euid=${encodeURIComponent(euid.value)}`);
             const p = await res.json();
             if (p.phase && p.phase !== 'idle') {
-              fetchPostsProgressPhase.value = p.phase;
+              fetchRepliesProgressPhase.value = p.phase;
+            }
+            if (p.total > 0) {
+              fetchRepliesProgressCurrent.value = p.current;
+              fetchRepliesProgressTotal.value = p.total;
             }
             if (p.done) {
               repliesDone = true;
+              fetchRepliesLoading.value = false;
               if (p.error) {
                 repliesError = p.error;
               } else {
@@ -2271,7 +2303,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsDeepseekKey, skipDeepseekSetup, configSaving, configError, configCookie, configDeepseekKey, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsDeepseekKey, skipDeepseekSetup, configSaving, configError, configCookie, configDeepseekKey, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
   }
 }).mount('#app');
 </script>
