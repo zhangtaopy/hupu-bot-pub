@@ -2247,8 +2247,6 @@ createApp({
           message: `获取成功! 回帖: ${repliesFetched} 条, 发帖: 已完成`,
         };
       } catch (e) {
-        fetchRepliesLoading.value = false;
-        fetchPostsLoading.value = false;
         fetchResult.value = { success: false, message: '网络错误: ' + (e.message || '未知错误') };
         error.value = '获取数据失败: ' + (e.message || '网络错误');
       } finally {
