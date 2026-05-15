@@ -26,7 +26,10 @@ fn sse_round_event(trace: &AgentTrace) -> String {
         "post_count": trace.post_count,
         "reasoning": trace.reasoning,
         "summary_html": trace.format_md(),
-    })).unwrap_or_default()
+    })).unwrap_or_else(|e| {
+        eprintln!("[qa] sse_round_event serialize error: {e}");
+        String::new()
+    })
 }
 
 fn sse_answer_event(answer: &str, username: &str, detail: &str) -> String {
@@ -35,7 +38,10 @@ fn sse_answer_event(answer: &str, username: &str, detail: &str) -> String {
         "answer": answer,
         "username": username,
         "prompt_detail": detail,
-    })).unwrap_or_default()
+    })).unwrap_or_else(|e| {
+        eprintln!("[qa] sse_answer_event serialize error: {e}");
+        String::new()
+    })
 }
 
 // ── Public API ──
@@ -85,6 +91,7 @@ async fn agent_loop(
     let mut traces: Vec<AgentTrace> = Vec::new();
     let mut previous_rounds_text = String::new();
     let mut final_answer = String::new();
+    let conn = db::open_db(db_path)?;
 
     let max_rounds = 5;
     for round in 1..=max_rounds {
@@ -109,25 +116,20 @@ async fn agent_loop(
             break;
         }
 
-        // Execute search — open/close connection only for DB operations
-        let (round_replies, round_posts) = {
-            let conn = db::open_db(db_path)?;
-            let search_replies = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "replies");
-            let search_posts = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "posts");
+        let search_replies = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "replies");
+        let search_posts = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "posts");
 
-            let round_replies = if search_replies && !action.keywords.is_empty() {
-                db::search_replies(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
-            } else {
-                Vec::new()
-            };
+        let round_replies = if search_replies && !action.keywords.is_empty() {
+            db::search_replies(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
+        } else {
+            Vec::new()
+        };
 
-            let round_posts = if search_posts && !action.keywords.is_empty() {
-                db::search_posts(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
-            } else {
-                Vec::new()
-            };
-            (round_replies, round_posts)
-        }; // conn dropped here
+        let round_posts = if search_posts && !action.keywords.is_empty() {
+            db::search_posts(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
+        } else {
+            Vec::new()
+        };
 
         let new_reply_count = round_replies.iter().filter(|r| !seen_reply_pids.contains(&r.pid)).count();
         let new_post_count = round_posts.iter().filter(|p| !seen_post_tids.contains(&p.tid)).count();
@@ -165,14 +167,11 @@ async fn agent_loop(
     }
 
     if final_answer.is_empty() {
-        let overview = {
-            let conn = db::open_db(db_path)?;
-            build_overview(
-                &conn, euid, ctx.reply_count, ctx.post_count,
-                ctx.topic_vec.clone(), ctx.ai_reply_summary.clone(),
-                ctx.ai_post_summary.clone(), ctx.ai_reply_personal_info.clone(),
-            )?
-        };
+        let overview = build_overview(
+            &conn, euid, ctx.reply_count, ctx.post_count,
+            ctx.topic_vec.clone(), ctx.ai_reply_summary.clone(),
+            ctx.ai_post_summary.clone(), ctx.ai_reply_personal_info.clone(),
+        )?;
         final_answer = crate::deepseek::generate_answer(
             http_client, api_key, question, &ctx.username, &overview,
             &all_replies, &all_posts, history_ctx,
@@ -195,7 +194,9 @@ async fn agent_loop(
 
 async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) {
     if let Some(tx) = tx {
-        let _ = tx.send(data.to_string()).await;
+        if tx.send(data.to_string()).await.is_err() {
+            eprintln!("[qa] emit error: channel closed");
+        }
     }
 }
 
@@ -239,14 +240,20 @@ fn load_user_context(conn: &rusqlite::Connection, euid: &str) -> anyhow::Result<
 
 fn load_ai_reply_summary(conn: &rusqlite::Connection, euid: &str) -> Option<String> {
     db::get_ai_analysis(conn, euid)
-        .unwrap_or(None)
+        .unwrap_or_else(|e| {
+            eprintln!("[qa] load_ai_reply_summary db error: {e}");
+            None
+        })
         .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
         .and_then(|v| v.get("summary").and_then(|s| s.as_str().map(String::from)))
 }
 
 fn load_ai_personal_info(conn: &rusqlite::Connection, euid: &str) -> Option<String> {
     db::get_ai_analysis(conn, euid)
-        .unwrap_or(None)
+        .unwrap_or_else(|e| {
+            eprintln!("[qa] load_ai_personal_info db error: {e}");
+            None
+        })
         .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
         .and_then(|v| {
             let pi = &v["personal_info"];
@@ -256,7 +263,10 @@ fn load_ai_personal_info(conn: &rusqlite::Connection, euid: &str) -> Option<Stri
 
 fn load_ai_post_summary(conn: &rusqlite::Connection, euid: &str) -> Option<String> {
     db::get_ai_post_analysis(conn, euid)
-        .unwrap_or(None)
+        .unwrap_or_else(|e| {
+            eprintln!("[qa] load_ai_post_summary db error: {e}");
+            None
+        })
         .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
         .and_then(|v| v.get("summary").and_then(|s| s.as_str().map(String::from)))
 }
@@ -316,29 +326,23 @@ fn build_overview(
 }
 
 fn compute_activity_period(conn: &rusqlite::Connection, euid: &str) -> Option<String> {
-    let first_reply = conn.query_row(
-        "SELECT create_time FROM replies WHERE euid = ? ORDER BY create_time ASC LIMIT 1",
+    let reply_range = conn.query_row(
+        "SELECT MIN(create_time), MAX(create_time) FROM replies WHERE euid = ?",
         rusqlite::params![euid],
-        |row| row.get::<_, i64>(0),
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
     ).ok();
-    let last_reply = conn.query_row(
-        "SELECT create_time FROM replies WHERE euid = ? ORDER BY create_time DESC LIMIT 1",
+    let post_range = conn.query_row(
+        "SELECT MIN(create_time), MAX(create_time) FROM posts WHERE euid = ?",
         rusqlite::params![euid],
-        |row| row.get::<_, i64>(0),
-    ).ok();
-    let first_post = conn.query_row(
-        "SELECT create_time FROM posts WHERE euid = ? ORDER BY create_time ASC LIMIT 1",
-        rusqlite::params![euid],
-        |row| row.get::<_, i64>(0),
-    ).ok();
-    let last_post = conn.query_row(
-        "SELECT create_time FROM posts WHERE euid = ? ORDER BY create_time DESC LIMIT 1",
-        rusqlite::params![euid],
-        |row| row.get::<_, i64>(0),
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
     ).ok();
 
-    let first = first_reply.into_iter().chain(first_post).min();
-    let last = last_reply.into_iter().chain(last_post).max();
+    let first = reply_range.map(|(f, _)| f).into_iter()
+        .chain(post_range.map(|(f, _)| f))
+        .min();
+    let last = reply_range.map(|(_, l)| l).into_iter()
+        .chain(post_range.map(|(_, l)| l))
+        .max();
 
     match (first, last) {
         (Some(f), Some(l)) => {
