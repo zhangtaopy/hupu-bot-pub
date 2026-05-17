@@ -35,6 +35,8 @@ pub struct SaveConfigRequest {
     pub ollama_api_key: String,
     #[serde(default)]
     pub ollama_model: String,
+    #[serde(default)]
+    pub deepseek_model: String,
 }
 
 type ApiResult = Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)>;
@@ -60,6 +62,7 @@ pub async fn save_config(
     let deepseek_api_key = body.deepseek_api_key.trim().to_string();
     let ollama_api_key = body.ollama_api_key.trim().to_string();
     let ollama_model = body.ollama_model.trim().to_string();
+    let deepseek_model = body.deepseek_model.trim().to_string();
 
     // Key-only update: cookie already configured, just update the API keys
     if cookie.is_empty() && (!deepseek_api_key.is_empty() || !ollama_api_key.is_empty()) {
@@ -72,6 +75,9 @@ pub async fn save_config(
             }
             if !ollama_model.is_empty() {
                 existing.ollama_model = ollama_model;
+            }
+            if !deepseek_model.is_empty() {
+                existing.deepseek_model = deepseek_model;
             }
             return crate::config::save(&existing)
                 .map(|_| Json(serde_json::json!({ "success": true })))
@@ -103,6 +109,7 @@ pub async fn save_config(
         deepseek_max_concurrency: 3,
         ollama_api_key,
         ollama_model,
+        deepseek_model,
     };
 
     crate::config::save(&config)

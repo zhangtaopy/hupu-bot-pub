@@ -29,6 +29,9 @@ pub struct Config {
     /// Ollama Cloud 模型名（可选，默认 gpt-oss:120b）
     #[serde(default)]
     pub ollama_model: String,
+    /// DeepSeek 模型名（可选，默认 deepseek-v4-flash）
+    #[serde(default)]
+    pub deepseek_model: String,
 }
 
 impl Config {
@@ -153,6 +156,11 @@ impl Config {
         } else {
             AiProvider::DeepSeek {
                 api_key: self.deepseek_api_key.clone(),
+                model: if self.deepseek_model.is_empty() {
+                    "deepseek-v4-flash".to_string()
+                } else {
+                    self.deepseek_model.clone()
+                },
             }
         }
     }

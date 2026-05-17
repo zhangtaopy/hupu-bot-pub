@@ -6,14 +6,13 @@ use crate::replies::ReplyRow;
 use crate::utils::strip_html;
 
 const CHUNK_CHARS: usize = 15_000;
-const DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
 const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/chat/completions";
 const OLLAMA_BASE_URL: &str = "https://ollama.com/v1/chat/completions";
 
 /// LLM provider configuration.
 #[derive(Clone)]
 pub enum AiProvider {
-    DeepSeek { api_key: String },
+    DeepSeek { api_key: String, model: String },
     Ollama { api_key: String, model: String },
 }
 
@@ -27,14 +26,14 @@ impl AiProvider {
 
     fn api_key(&self) -> &str {
         match self {
-            AiProvider::DeepSeek { api_key } => api_key,
+            AiProvider::DeepSeek { api_key, .. } => api_key,
             AiProvider::Ollama { api_key, .. } => api_key,
         }
     }
 
     fn model(&self) -> &str {
         match self {
-            AiProvider::DeepSeek { .. } => DEEPSEEK_MODEL,
+            AiProvider::DeepSeek { model, .. } => model,
             AiProvider::Ollama { model, .. } => model,
         }
     }

@@ -168,9 +168,9 @@
           <input v-model="configAiKey" type="text" :placeholder="configProvider === 'deepseek' ? 'sk-...' : 'ollama-api-key...'"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
-        <div class="mb-6" v-if="configProvider === 'ollama'">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Ollama 模型名</label>
-          <input v-model="configOllamaModel" type="text" placeholder="gpt-oss:120b"
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek 模型名' : 'Ollama 模型名' }}</label>
+          <input v-model="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig" :disabled="configSaving || !configCookie.trim()"
@@ -213,9 +213,9 @@
           <input v-model="configAiKey" type="text" :placeholder="configProvider === 'deepseek' ? 'sk-...' : 'ollama-api-key...'"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
-        <div class="mb-6" v-if="configProvider === 'ollama'">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Ollama 模型名</label>
-          <input v-model="configOllamaModel" type="text" placeholder="gpt-oss:120b"
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek 模型名' : 'Ollama 模型名' }}</label>
+          <input v-model="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig"
@@ -1248,6 +1248,7 @@ createApp({
     const configCookie = ref('');
     const configProvider = ref('deepseek');
     const configAiKey = ref('');
+    const configDeepseekModel = ref('deepseek-v4-flash');
     const configOllamaModel = ref('gpt-oss:120b');
     const userInfo = ref(null);
     const stats = ref(null);
@@ -2306,12 +2307,14 @@ createApp({
               cookie: '',
               deepseek_api_key: isDeepseek ? configAiKey.value : '',
               ollama_api_key: isDeepseek ? '' : configAiKey.value,
+              deepseek_model: isDeepseek ? configDeepseekModel.value : '',
               ollama_model: isDeepseek ? '' : configOllamaModel.value,
             }
           : {
               cookie: configCookie.value,
               deepseek_api_key: isDeepseek ? configAiKey.value : '',
               ollama_api_key: isDeepseek ? '' : configAiKey.value,
+              deepseek_model: isDeepseek ? configDeepseekModel.value : '',
               ollama_model: isDeepseek ? '' : configOllamaModel.value,
             };
         const res = await fetch('/api/config/save', {
@@ -2342,7 +2345,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configOllamaModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configDeepseekModel, configOllamaModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
   }
 }).mount('#app');
 </script>
