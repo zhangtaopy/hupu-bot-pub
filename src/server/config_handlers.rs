@@ -7,6 +7,7 @@ pub struct ConfigStatusResponse {
     pub has_cookie: bool,
     pub has_deepseek_key: bool,
     pub has_ollama_key: bool,
+    pub has_openrouter_key: bool,
 }
 
 pub async fn get_config_status() -> Json<ConfigStatusResponse> {
@@ -16,12 +17,14 @@ pub async fn get_config_status() -> Json<ConfigStatusResponse> {
             has_cookie: !cfg.cookie.is_empty(),
             has_deepseek_key: !cfg.deepseek_api_key.is_empty(),
             has_ollama_key: !cfg.ollama_api_key.is_empty(),
+            has_openrouter_key: !cfg.openrouter_api_key.is_empty(),
         }),
         None => Json(ConfigStatusResponse {
             configured: false,
             has_cookie: false,
             has_deepseek_key: false,
             has_ollama_key: false,
+            has_openrouter_key: false,
         }),
     }
 }
@@ -37,6 +40,10 @@ pub struct SaveConfigRequest {
     pub ollama_model: String,
     #[serde(default)]
     pub deepseek_model: String,
+    #[serde(default)]
+    pub openrouter_api_key: String,
+    #[serde(default)]
+    pub openrouter_model: String,
 }
 
 type ApiResult = Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)>;
@@ -63,9 +70,11 @@ pub async fn save_config(
     let ollama_api_key = body.ollama_api_key.trim().to_string();
     let ollama_model = body.ollama_model.trim().to_string();
     let deepseek_model = body.deepseek_model.trim().to_string();
+    let openrouter_api_key = body.openrouter_api_key.trim().to_string();
+    let openrouter_model = body.openrouter_model.trim().to_string();
 
     // Key-only update: cookie already configured, just update the API keys
-    if cookie.is_empty() && (!deepseek_api_key.is_empty() || !ollama_api_key.is_empty()) {
+    if cookie.is_empty() && (!deepseek_api_key.is_empty() || !ollama_api_key.is_empty() || !openrouter_api_key.is_empty()) {
         if let Some(mut existing) = crate::config::try_get() {
             if !deepseek_api_key.is_empty() {
                 existing.deepseek_api_key = deepseek_api_key;
@@ -78,6 +87,12 @@ pub async fn save_config(
             }
             if !deepseek_model.is_empty() {
                 existing.deepseek_model = deepseek_model;
+            }
+            if !openrouter_api_key.is_empty() {
+                existing.openrouter_api_key = openrouter_api_key;
+            }
+            if !openrouter_model.is_empty() {
+                existing.openrouter_model = openrouter_model;
             }
             return crate::config::save(&existing)
                 .map(|_| Json(serde_json::json!({ "success": true })))
@@ -110,6 +125,8 @@ pub async fn save_config(
         ollama_api_key,
         ollama_model,
         deepseek_model,
+        openrouter_api_key,
+        openrouter_model,
     };
 
     crate::config::save(&config)

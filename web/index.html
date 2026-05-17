@@ -148,7 +148,7 @@
             <li>复制整个 Cookie 值粘贴到下方</li>
           </ol>
           <p class="text-sm text-indigo-700 font-medium mt-3 mb-1">AI 配置（可选）：</p>
-          <p class="text-xs text-indigo-600/80">用于 AI 分析功能，支持 DeepSeek 或 Ollama Cloud</p>
+          <p class="text-xs text-indigo-600/80">用于 AI 分析功能，支持 DeepSeek、Ollama Cloud 或 OpenRouter</p>
         </div>
         <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
         <div class="mb-4">
@@ -161,16 +161,17 @@
           <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
             <option value="deepseek">DeepSeek</option>
             <option value="ollama">Ollama Cloud</option>
+            <option value="openrouter">OpenRouter</option>
           </select>
         </div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek API Key' : 'Ollama API Key' }} <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
-          <input v-model="configAiKey" type="text" :placeholder="configProvider === 'deepseek' ? 'sk-...' : 'ollama-api-key...'"
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} API Key <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
+          <input v-model="configAiKey" type="text" :placeholder="providerKeyPlaceholder"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek 模型名' : 'Ollama 模型名' }}</label>
-          <input :value="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" @input="configProvider === 'deepseek' ? configDeepseekModel = $event.target.value : configOllamaModel = $event.target.value" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} 模型名</label>
+          <input v-model="providerModel" type="text" :placeholder="providerModelPlaceholder"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig" :disabled="configSaving || !configCookie.trim()"
@@ -198,7 +199,7 @@
         </div>
         <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 border border-indigo-100">
           <p class="text-sm text-indigo-700 font-medium mb-2">AI 提供商配置</p>
-          <p class="text-xs text-indigo-600/80">用于 AI 智能分析功能（用户画像、发帖分析等），支持 DeepSeek 和 Ollama Cloud。不填写则 AI 分析功能不可用。</p>
+          <p class="text-xs text-indigo-600/80">用于 AI 智能分析功能（用户画像、发帖分析等），支持 DeepSeek、Ollama Cloud 和 OpenRouter。不填写则 AI 分析功能不可用。</p>
         </div>
         <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
         <div class="mb-4">
@@ -206,16 +207,17 @@
           <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
             <option value="deepseek">DeepSeek</option>
             <option value="ollama">Ollama Cloud</option>
+            <option value="openrouter">OpenRouter</option>
           </select>
         </div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek API Key' : 'Ollama API Key' }}</label>
-          <input v-model="configAiKey" type="text" :placeholder="configProvider === 'deepseek' ? 'sk-...' : 'ollama-api-key...'"
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} API Key</label>
+          <input v-model="configAiKey" type="text" :placeholder="providerKeyPlaceholder"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek 模型名' : 'Ollama 模型名' }}</label>
-          <input :value="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" @input="configProvider === 'deepseek' ? configDeepseekModel = $event.target.value : configOllamaModel = $event.target.value" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} 模型名</label>
+          <input v-model="providerModel" type="text" :placeholder="providerModelPlaceholder"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig"
@@ -1251,6 +1253,15 @@ createApp({
     const configAiKey = ref('');
     const configDeepseekModel = ref('deepseek-v4-flash');
     const configOllamaModel = ref('gpt-oss:120b');
+    const configOpenrouterModel = ref('google/gemini-2.0-flash-001');
+    const providerModels = { deepseek: 'deepseek-v4-flash', ollama: 'gpt-oss:120b', openrouter: 'google/gemini-2.0-flash-001' };
+    const providerLabel = computed(() => ({ deepseek: 'DeepSeek', ollama: 'Ollama', openrouter: 'OpenRouter' }[configProvider.value] || 'AI'));
+    const providerKeyPlaceholder = computed(() => ({ deepseek: 'sk-...', ollama: 'ollama-api-key...', openrouter: 'sk-or-...' }[configProvider.value] || ''));
+    const providerModelPlaceholder = computed(() => providerModels[configProvider.value] || '');
+    const providerModel = computed({
+      get() { return { deepseek: configDeepseekModel, ollama: configOllamaModel, openrouter: configOpenrouterModel }[configProvider.value]?.value || ''; },
+      set(v) { const r = { deepseek: configDeepseekModel, ollama: configOllamaModel, openrouter: configOpenrouterModel }[configProvider.value]; if (r) r.value = v; },
+    });
     const userInfo = ref(null);
     const stats = ref(null);
     const groups = ref([]);
@@ -2298,7 +2309,7 @@ createApp({
         if (res.ok) {
           const data = await res.json();
           needsConfig.value = !data.configured;
-          needsAiKey.value = data.configured && !data.has_deepseek_key && !data.has_ollama_key;
+          needsAiKey.value = data.configured && !data.has_deepseek_key && !data.has_ollama_key && !data.has_openrouter_key;
         }
       } catch (e) {
         needsConfig.value = true;
@@ -2309,21 +2320,25 @@ createApp({
       configSaving.value = true;
       configError.value = '';
       try {
-        const isDeepseek = configProvider.value === 'deepseek';
+        const p = configProvider.value;
         const payload = needsAiKey.value
           ? {
               cookie: '',
-              deepseek_api_key: isDeepseek ? configAiKey.value : '',
-              ollama_api_key: isDeepseek ? '' : configAiKey.value,
-              deepseek_model: isDeepseek ? configDeepseekModel.value : '',
-              ollama_model: isDeepseek ? '' : configOllamaModel.value,
+              deepseek_api_key: p === 'deepseek' ? configAiKey.value : '',
+              ollama_api_key: p === 'ollama' ? configAiKey.value : '',
+              openrouter_api_key: p === 'openrouter' ? configAiKey.value : '',
+              deepseek_model: p === 'deepseek' ? configDeepseekModel.value : '',
+              ollama_model: p === 'ollama' ? configOllamaModel.value : '',
+              openrouter_model: p === 'openrouter' ? configOpenrouterModel.value : '',
             }
           : {
               cookie: configCookie.value,
-              deepseek_api_key: isDeepseek ? configAiKey.value : '',
-              ollama_api_key: isDeepseek ? '' : configAiKey.value,
-              deepseek_model: isDeepseek ? configDeepseekModel.value : '',
-              ollama_model: isDeepseek ? '' : configOllamaModel.value,
+              deepseek_api_key: p === 'deepseek' ? configAiKey.value : '',
+              ollama_api_key: p === 'ollama' ? configAiKey.value : '',
+              openrouter_api_key: p === 'openrouter' ? configAiKey.value : '',
+              deepseek_model: p === 'deepseek' ? configDeepseekModel.value : '',
+              ollama_model: p === 'ollama' ? configOllamaModel.value : '',
+              openrouter_model: p === 'openrouter' ? configOpenrouterModel.value : '',
             };
         const res = await fetch('/api/config/save', {
           method: 'POST',
@@ -2353,7 +2368,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configDeepseekModel, configOllamaModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail, fmtTokens };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configDeepseekModel, configOllamaModel, configOpenrouterModel, providerLabel, providerKeyPlaceholder, providerModelPlaceholder, providerModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail, fmtTokens };
   }
 }).mount('#app');
 </script>

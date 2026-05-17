@@ -32,6 +32,12 @@ pub struct Config {
     /// DeepSeek 模型名（可选，默认 deepseek-v4-flash）
     #[serde(default)]
     pub deepseek_model: String,
+    /// OpenRouter API key（可选，用于替代 DeepSeek/Ollama）
+    #[serde(default)]
+    pub openrouter_api_key: String,
+    /// OpenRouter 模型名（可选，默认 google/gemini-2.0-flash-001）
+    #[serde(default)]
+    pub openrouter_model: String,
 }
 
 impl Config {
@@ -142,9 +148,18 @@ pub fn init_optional() {
 }
 
 impl Config {
-    /// 根据配置创建 AI provider。优先使用 Ollama Cloud，否则使用 DeepSeek。
+    /// 根据配置创建 AI provider。优先级：OpenRouter > Ollama > DeepSeek。
     pub fn ai_provider(&self) -> AiProvider {
-        if !self.ollama_api_key.is_empty() {
+        if !self.openrouter_api_key.is_empty() {
+            AiProvider::OpenRouter {
+                api_key: self.openrouter_api_key.clone(),
+                model: if self.openrouter_model.is_empty() {
+                    "google/gemini-2.0-flash-001".to_string()
+                } else {
+                    self.openrouter_model.clone()
+                },
+            }
+        } else if !self.ollama_api_key.is_empty() {
             AiProvider::Ollama {
                 api_key: self.ollama_api_key.clone(),
                 model: if self.ollama_model.is_empty() {

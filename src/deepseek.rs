@@ -8,12 +8,14 @@ use crate::utils::strip_html;
 const CHUNK_CHARS: usize = 15_000;
 const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/chat/completions";
 const OLLAMA_BASE_URL: &str = "https://ollama.com/v1/chat/completions";
+const OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 
 /// LLM provider configuration.
 #[derive(Clone)]
 pub enum AiProvider {
     DeepSeek { api_key: String, model: String },
     Ollama { api_key: String, model: String },
+    OpenRouter { api_key: String, model: String },
 }
 
 impl AiProvider {
@@ -21,6 +23,7 @@ impl AiProvider {
         match self {
             AiProvider::DeepSeek { .. } => DEEPSEEK_BASE_URL,
             AiProvider::Ollama { .. } => OLLAMA_BASE_URL,
+            AiProvider::OpenRouter { .. } => OPENROUTER_BASE_URL,
         }
     }
 
@@ -28,6 +31,7 @@ impl AiProvider {
         match self {
             AiProvider::DeepSeek { api_key, .. } => api_key,
             AiProvider::Ollama { api_key, .. } => api_key,
+            AiProvider::OpenRouter { api_key, .. } => api_key,
         }
     }
 
@@ -35,12 +39,13 @@ impl AiProvider {
         match self {
             AiProvider::DeepSeek { model, .. } => model,
             AiProvider::Ollama { model, .. } => model,
+            AiProvider::OpenRouter { model, .. } => model,
         }
     }
 
     /// Whether to include `response_format: json_object` in requests.
     fn use_json_mode(&self) -> bool {
-        matches!(self, AiProvider::DeepSeek { .. })
+        matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. })
     }
 }
 
