@@ -170,7 +170,7 @@
         </div>
         <div class="mb-6">
           <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek 模型名' : 'Ollama 模型名' }}</label>
-          <input v-model="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
+          <input :value="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" @input="configProvider === 'deepseek' ? configDeepseekModel = $event.target.value : configOllamaModel = $event.target.value" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig" :disabled="configSaving || !configCookie.trim()"
@@ -215,7 +215,7 @@
         </div>
         <div class="mb-6">
           <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek 模型名' : 'Ollama 模型名' }}</label>
-          <input v-model="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
+          <input :value="configProvider === 'deepseek' ? configDeepseekModel : configOllamaModel" @input="configProvider === 'deepseek' ? configDeepseekModel = $event.target.value : configOllamaModel = $event.target.value" type="text" :placeholder="configProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-oss:120b'"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig"
