@@ -17,27 +17,18 @@ pub struct Config {
     /// 用户 ID，可从 cookie 中的 u 字段自动解析
     #[serde(default)]
     pub puid: String,
-    /// DeepSeek API key，用于 AI 分析（可选）
+    /// AI 提供商：deepseek / ollama / openrouter / opencode
     #[serde(default)]
-    pub deepseek_api_key: String,
-    /// DeepSeek API 最大并发数
+    pub provider: String,
+    /// AI API Key
+    #[serde(default)]
+    pub api_key: String,
+    /// AI 模型名（可选，为空则使用对应 provider 的默认模型）
+    #[serde(default)]
+    pub model: String,
+    /// AI API 最大并发数
     #[serde(default = "default_concurrency")]
-    pub deepseek_max_concurrency: usize,
-    /// Ollama Cloud API key（可选，用于替代 DeepSeek）
-    #[serde(default)]
-    pub ollama_api_key: String,
-    /// Ollama Cloud 模型名（可选，默认 gpt-oss:120b）
-    #[serde(default)]
-    pub ollama_model: String,
-    /// DeepSeek 模型名（可选，默认 deepseek-v4-flash）
-    #[serde(default)]
-    pub deepseek_model: String,
-    /// OpenRouter API key（可选，用于替代 DeepSeek/Ollama）
-    #[serde(default)]
-    pub openrouter_api_key: String,
-    /// OpenRouter 模型名（可选，默认 google/gemini-2.0-flash-001）
-    #[serde(default)]
-    pub openrouter_model: String,
+    pub max_concurrency: usize,
 }
 
 impl Config {
@@ -148,35 +139,28 @@ pub fn init_optional() {
 }
 
 impl Config {
-    /// 根据配置创建 AI provider。优先级：OpenRouter > Ollama > DeepSeek。
+    /// 根据配置创建 AI provider。provider 字段决定使用哪个服务商。
     pub fn ai_provider(&self) -> AiProvider {
-        if !self.openrouter_api_key.is_empty() {
-            AiProvider::OpenRouter {
-                api_key: self.openrouter_api_key.clone(),
-                model: if self.openrouter_model.is_empty() {
-                    "google/gemini-2.0-flash-001".to_string()
-                } else {
-                    self.openrouter_model.clone()
-                },
-            }
-        } else if !self.ollama_api_key.is_empty() {
-            AiProvider::Ollama {
-                api_key: self.ollama_api_key.clone(),
-                model: if self.ollama_model.is_empty() {
-                    "gpt-oss:120b".to_string()
-                } else {
-                    self.ollama_model.clone()
-                },
-            }
+        let api_key = self.api_key.clone();
+        let model = if self.model.is_empty() {
+            self.default_model().to_string()
         } else {
-            AiProvider::DeepSeek {
-                api_key: self.deepseek_api_key.clone(),
-                model: if self.deepseek_model.is_empty() {
-                    "deepseek-v4-flash".to_string()
-                } else {
-                    self.deepseek_model.clone()
-                },
-            }
+            self.model.clone()
+        };
+        match self.provider.as_str() {
+            "opencode" => AiProvider::OpenCode { api_key, model },
+            "openrouter" => AiProvider::OpenRouter { api_key, model },
+            "ollama" => AiProvider::Ollama { api_key, model },
+            _ => AiProvider::DeepSeek { api_key, model },
+        }
+    }
+
+    fn default_model(&self) -> &'static str {
+        match self.provider.as_str() {
+            "opencode" => crate::deepseek::DEFAULT_OPENCODE_MODEL,
+            "openrouter" => crate::deepseek::DEFAULT_OPENROUTER_MODEL,
+            "ollama" => crate::deepseek::DEFAULT_OLLAMA_MODEL,
+            _ => crate::deepseek::DEFAULT_DEEPSEEK_MODEL,
         }
     }
 }

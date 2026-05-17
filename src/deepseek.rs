@@ -9,6 +9,12 @@ const CHUNK_CHARS: usize = 15_000;
 const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/chat/completions";
 const OLLAMA_BASE_URL: &str = "https://ollama.com/v1/chat/completions";
 const OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1/chat/completions";
+
+pub const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
+pub const DEFAULT_OLLAMA_MODEL: &str = "gpt-oss:120b";
+pub const DEFAULT_OPENROUTER_MODEL: &str = "google/gemini-2.0-flash-001";
+pub const DEFAULT_OPENCODE_MODEL: &str = "opencode/deepseek-v4-flash-free";
 
 /// LLM provider configuration.
 #[derive(Clone)]
@@ -16,6 +22,7 @@ pub enum AiProvider {
     DeepSeek { api_key: String, model: String },
     Ollama { api_key: String, model: String },
     OpenRouter { api_key: String, model: String },
+    OpenCode { api_key: String, model: String },
 }
 
 impl AiProvider {
@@ -24,6 +31,7 @@ impl AiProvider {
             AiProvider::DeepSeek { .. } => DEEPSEEK_BASE_URL,
             AiProvider::Ollama { .. } => OLLAMA_BASE_URL,
             AiProvider::OpenRouter { .. } => OPENROUTER_BASE_URL,
+            AiProvider::OpenCode { .. } => OPENCODE_BASE_URL,
         }
     }
 
@@ -32,6 +40,7 @@ impl AiProvider {
             AiProvider::DeepSeek { api_key, .. } => api_key,
             AiProvider::Ollama { api_key, .. } => api_key,
             AiProvider::OpenRouter { api_key, .. } => api_key,
+            AiProvider::OpenCode { api_key, .. } => api_key,
         }
     }
 
@@ -40,12 +49,13 @@ impl AiProvider {
             AiProvider::DeepSeek { model, .. } => model,
             AiProvider::Ollama { model, .. } => model,
             AiProvider::OpenRouter { model, .. } => model,
+            AiProvider::OpenCode { model, .. } => model,
         }
     }
 
     /// Whether to include `response_format: json_object` in requests.
     fn use_json_mode(&self) -> bool {
-        matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. })
+        matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. } | AiProvider::OpenCode { .. })
     }
 }
 

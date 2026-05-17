@@ -82,7 +82,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
 
     set_progress(&state, "AI分批分析中", 0, total_chunks, false, None);
 
-    let max_concurrency = cfg.deepseek_max_concurrency.max(1);
+    let max_concurrency = cfg.max_concurrency.max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let failed_count = Arc::new(AtomicUsize::new(0));
     let provider2 = provider.clone();
@@ -283,7 +283,7 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
 
     set_progress(&state, "AI分批分析帖子中", 0, total_chunks, false, None);
 
-    let max_concurrency = cfg.deepseek_max_concurrency.max(1);
+    let max_concurrency = cfg.max_concurrency.max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let failed_count = Arc::new(AtomicUsize::new(0));
     let provider2 = provider.clone();

@@ -1,5 +1,7 @@
 {
   "cookie": "",
-  "deepseek_api_key": "",
-  "deepseek_max_concurrency": 3
+  "provider": "deepseek",
+  "api_key": "",
+  "model": "",
+  "max_concurrency": 3
 }

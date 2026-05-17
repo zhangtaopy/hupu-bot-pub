@@ -253,22 +253,19 @@ fn save_config(cookie: &str) -> Result<()> {
     let shumei_id = crate::config::Config::parse_smid_from_cookie(cookie)?;
 
     // Preserve existing AI config if config already exists
-    let (deepseek_api_key, deepseek_max_concurrency, ollama_api_key, ollama_model, deepseek_model, openrouter_api_key, openrouter_model) = match crate::config::try_get() {
-        Some(existing) => (existing.deepseek_api_key, existing.deepseek_max_concurrency, existing.ollama_api_key, existing.ollama_model, existing.deepseek_model, existing.openrouter_api_key, existing.openrouter_model),
-        None => (String::new(), 3, String::new(), String::new(), String::new(), String::new(), String::new()),
+    let (provider, api_key, model, max_concurrency) = match crate::config::try_get() {
+        Some(existing) => (existing.provider.clone(), existing.api_key.clone(), existing.model.clone(), existing.max_concurrency),
+        None => (String::new(), String::new(), String::new(), 3),
     };
 
     let config = crate::config::Config {
         cookie: cookie.to_string(),
         shumei_id,
         puid,
-        deepseek_api_key,
-        deepseek_max_concurrency,
-        ollama_api_key,
-        ollama_model,
-        deepseek_model,
-        openrouter_api_key,
-        openrouter_model,
+        provider,
+        api_key,
+        model,
+        max_concurrency,
     };
 
     crate::config::save(&config)?;

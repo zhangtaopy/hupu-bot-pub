@@ -410,10 +410,10 @@ pub async fn start_ai_analysis(
             })));
         }
     };
-    if cfg.deepseek_api_key.is_empty() && cfg.ollama_api_key.is_empty() && cfg.openrouter_api_key.is_empty() {
+    if cfg.api_key.is_empty() {
         return Ok(Json(serde_json::json!({
             "status": "error",
-            "error": "未配置 AI API Key（请在 config.json 中添加 deepseek_api_key、ollama_api_key 或 openrouter_api_key）",
+            "error": "未配置 AI API Key（请在 config.json 中添加 api_key）",
         })));
     }
 
@@ -528,10 +528,10 @@ pub async fn start_ai_post_analysis(
             })));
         }
     };
-    if cfg.deepseek_api_key.is_empty() && cfg.ollama_api_key.is_empty() && cfg.openrouter_api_key.is_empty() {
+    if cfg.api_key.is_empty() {
         return Ok(Json(serde_json::json!({
             "status": "error",
-            "error": "未配置 AI API Key（请在 config.json 中添加 deepseek_api_key、ollama_api_key 或 openrouter_api_key）",
+            "error": "未配置 AI API Key（请在 config.json 中添加 api_key）",
         })));
     }
 
@@ -704,8 +704,8 @@ pub async fn qa_ask(
 
     let validation_err: Option<String> = match crate::config::try_get() {
         None => Some("请先配置 Cookie".into()),
-        Some(c) if c.deepseek_api_key.is_empty() && c.ollama_api_key.is_empty() && c.openrouter_api_key.is_empty() => {
-            Some("未配置 AI API Key（请在 config.json 中添加 deepseek_api_key、ollama_api_key 或 openrouter_api_key）".into())
+        Some(c) if c.api_key.is_empty() => {
+            Some("未配置 AI API Key（请在 config.json 中添加 api_key）".into())
         }
         _ if body.question.trim().is_empty() => Some("问题不能为空".into()),
         Some(c) => {
