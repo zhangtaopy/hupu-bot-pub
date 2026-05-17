@@ -32,12 +32,14 @@ fn sse_round_event(trace: &AgentTrace) -> String {
     })
 }
 
-fn sse_answer_event(answer: &str, username: &str, detail: &str) -> String {
+fn sse_answer_event(answer: &str, username: &str, detail: &str, usage: &crate::deepseek::TokenUsage) -> String {
     serde_json::to_string(&serde_json::json!({
         "type": "answer",
         "answer": answer,
         "username": username,
         "prompt_detail": detail,
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
     })).unwrap_or_else(|e| {
         eprintln!("[qa] sse_answer_event serialize error: {e}");
         String::new()
@@ -62,12 +64,12 @@ pub async fn run_qa_streaming(
     };
     let history_ctx = crate::deepseek::format_history(history);
 
-    let (answer, traces) = agent_loop(
+    let (answer, traces, token_usage) = agent_loop(
         db_path, http_client, provider, question, euid, &ctx, &history_ctx, Some(event_tx),
     ).await?;
 
     let detail = build_prompt_detail(&traces, &ctx.user_ctx_text);
-    let _ = event_tx.send(sse_answer_event(&answer, &ctx.username, &detail)).await;
+    let _ = event_tx.send(sse_answer_event(&answer, &ctx.username, &detail, &token_usage)).await;
 
     Ok(())
 }
@@ -83,7 +85,7 @@ async fn agent_loop(
     ctx: &UserContext,
     history_ctx: &str,
     event_tx: Option<&tokio::sync::mpsc::Sender<String>>,
-) -> anyhow::Result<(String, Vec<AgentTrace>)> {
+) -> anyhow::Result<(String, Vec<AgentTrace>, crate::deepseek::TokenUsage)> {
     let mut all_replies: Vec<crate::replies::ReplyRow> = Vec::new();
     let mut all_posts: Vec<crate::posts::PostRow> = Vec::new();
     let mut seen_reply_pids: HashSet<i64> = HashSet::new();
@@ -91,14 +93,17 @@ async fn agent_loop(
     let mut traces: Vec<AgentTrace> = Vec::new();
     let mut previous_rounds_text = String::new();
     let mut final_answer = String::new();
+    let mut total_usage = crate::deepseek::TokenUsage::default();
     let conn = db::open_db(db_path)?;
 
     let max_rounds = 5;
     for round in 1..=max_rounds {
-        let action = crate::deepseek::agent_decide(
+        let (action, usage) = crate::deepseek::agent_decide(
             http_client, provider, question, &ctx.user_ctx_text, history_ctx,
             &previous_rounds_text, round,
         ).await?;
+        total_usage.prompt_tokens += usage.prompt_tokens;
+        total_usage.completion_tokens += usage.completion_tokens;
 
         if action.action == "final_answer" {
             final_answer = action.answer;
@@ -172,10 +177,13 @@ async fn agent_loop(
             ctx.topic_vec.clone(), ctx.ai_reply_summary.clone(),
             ctx.ai_post_summary.clone(), ctx.ai_reply_personal_info.clone(),
         )?;
-        final_answer = crate::deepseek::generate_answer(
+        let (answer, usage) = crate::deepseek::generate_answer(
             http_client, provider, question, &ctx.username, &overview,
             &all_replies, &all_posts, history_ctx,
         ).await?;
+        final_answer = answer;
+        total_usage.prompt_tokens += usage.prompt_tokens;
+        total_usage.completion_tokens += usage.completion_tokens;
         let trace = AgentTrace {
             round: max_rounds + 1,
             action: "达到最大轮数，综合所有结果给出最终回答".into(),
@@ -189,7 +197,7 @@ async fn agent_loop(
         traces.push(trace);
     }
 
-    Ok((final_answer, traces))
+    Ok((final_answer, traces, total_usage))
 }
 
 async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) {

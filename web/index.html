@@ -1129,6 +1129,7 @@
             <div class="flex items-center gap-2 mb-2">
               <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white shadow-sm" :class="msg.thinking ? 'bg-amber-400' : ''" :style="msg.thinking ? '' : 'background: linear-gradient(135deg, #10b981, #059669);'">AI</span>
               <span class="text-xs text-gray-400">{{ msg.time }}</span>
+              <span v-if="!msg.thinking && (msg.promptTokens || msg.completionTokens)" class="text-xs text-gray-400 ml-1 flex items-center gap-1.5"><span>👆{{ fmtTokens(msg.promptTokens) }}</span><span>👇{{ fmtTokens(msg.completionTokens) }}</span></span>
             </div>
             <!-- Round traces (shown in real-time as they arrive) -->
             <div v-if="msg.rounds && msg.rounds.length" class="space-y-2 mb-3">
@@ -1870,7 +1871,7 @@ createApp({
       const now = new Date();
       const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
 
-      const entry = reactive({ question, answer: '', time, error: null, thinking: true, rounds: [], promptDetail: '', showDetail: false });
+      const entry = reactive({ question, answer: '', time, error: null, thinking: true, rounds: [], promptDetail: '', showDetail: false, promptTokens: 0, completionTokens: 0 });
       qaHistory.value.push(entry);
 
       // Build history from last 3 completed exchanges
@@ -1924,6 +1925,8 @@ createApp({
                 entry.thinking = false;
                 entry.answer = event.answer || '';
                 entry.promptDetail = event.prompt_detail || '';
+                entry.promptTokens = event.prompt_tokens || 0;
+                entry.completionTokens = event.completion_tokens || 0;
                 if (event.username) qaUsername.value = event.username;
               } else if (event.type === 'error') {
                 entry.thinking = false;
@@ -1956,6 +1959,11 @@ createApp({
       } finally {
         qaLoading.value = false;
       }
+    }
+
+    function fmtTokens(n) {
+      if (n >= 1000) return (n / 1000).toFixed(2).replace(/\.?0+$/, '') + 'K';
+      return String(n);
     }
 
     function togglePromptDetail(idx) {
@@ -2345,7 +2353,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configDeepseekModel, configOllamaModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configDeepseekModel, configOllamaModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail, fmtTokens };
   }
 }).mount('#app');
 </script>

@@ -239,7 +239,7 @@ pub async fn agent_decide(
     history_ctx: &str,
     previous_rounds: &str,
     round: usize,
-) -> Result<AgentAction> {
+) -> Result<(AgentAction, TokenUsage)> {
     let history_block = if history_ctx.is_empty() {
         String::new()
     } else {
@@ -260,7 +260,7 @@ pub async fn agent_decide(
     let result = call_llm(client, provider, QA_AGENT_PROMPT, &user_prompt).await?;
     let action: AgentAction = serde_json::from_value(result.value)
         .map_err(|e| anyhow::anyhow!("解析Agent决策失败: {}，原始: {}", e, result.raw_content))?;
-    Ok(action)
+    Ok((action, result.token_usage))
 }
 
 pub fn format_search_results_summary(replies: &[ReplyRow], posts: &[PostRow]) -> String {
@@ -355,7 +355,14 @@ struct ResponseFormat {
 #[derive(Deserialize)]
 struct DeepSeekResponse {
     choices: Vec<Choice>,
+    usage: Option<TokenUsage>,
     error: Option<ApiError>,
+}
+
+#[derive(Deserialize, Clone, Default)]
+pub struct TokenUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
 }
 
 #[derive(Deserialize)]
@@ -582,10 +589,11 @@ pub fn chunk_replies(replies: &[ReplyRow]) -> Vec<Vec<ReplyRow>> {
 
 // ── DeepSeek API call ──
 
-/// Result of a DeepSeek API call: parsed JSON value and the raw content string.
+/// Result of a LLM API call: parsed JSON value, the raw content string, and token usage.
 pub struct DeepSeekResult {
     pub value: serde_json::Value,
     pub raw_content: String,
+    pub token_usage: TokenUsage,
 }
 
 #[derive(Serialize)]
@@ -663,7 +671,7 @@ async fn call_llm(
         }
     };
 
-    Ok(DeepSeekResult { value, raw_content: content })
+    Ok(DeepSeekResult { value, raw_content: content, token_usage: body.usage.unwrap_or_default() })
 }
 
 async fn call_llm_text(
@@ -671,7 +679,7 @@ async fn call_llm_text(
     provider: &AiProvider,
     system_prompt: &str,
     user_prompt: &str,
-) -> Result<String> {
+) -> Result<(String, TokenUsage)> {
     #[derive(Serialize)]
     struct TextRequest {
         model: String,
@@ -717,7 +725,7 @@ async fn call_llm_text(
         .content
         .clone();
 
-    Ok(content)
+    Ok((content, body.usage.unwrap_or_default()))
 }
 
 // ── Public entry points ──
@@ -947,7 +955,7 @@ pub async fn generate_answer(
     replies: &[ReplyRow],
     posts: &[PostRow],
     history_ctx: &str,
-) -> Result<String> {
+) -> Result<(String, TokenUsage)> {
     let overview_text = overview.format();
     let context = format_query_results(replies, posts);
 
