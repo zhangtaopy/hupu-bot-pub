@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::RwLock;
 
+use crate::deepseek::AiProvider;
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
     pub cookie: String,
@@ -21,6 +23,12 @@ pub struct Config {
     /// DeepSeek API 最大并发数
     #[serde(default = "default_concurrency")]
     pub deepseek_max_concurrency: usize,
+    /// Ollama Cloud API key（可选，用于替代 DeepSeek）
+    #[serde(default)]
+    pub ollama_api_key: String,
+    /// Ollama Cloud 模型名（可选，默认 gpt-oss:120b）
+    #[serde(default)]
+    pub ollama_model: String,
 }
 
 impl Config {
@@ -126,6 +134,26 @@ pub fn init_optional() {
         }
         Err(_) => {
             // Leave CONFIG as None — server can still start
+        }
+    }
+}
+
+impl Config {
+    /// 根据配置创建 AI provider。优先使用 Ollama Cloud，否则使用 DeepSeek。
+    pub fn ai_provider(&self) -> AiProvider {
+        if !self.ollama_api_key.is_empty() {
+            AiProvider::Ollama {
+                api_key: self.ollama_api_key.clone(),
+                model: if self.ollama_model.is_empty() {
+                    "gpt-oss:120b".to_string()
+                } else {
+                    self.ollama_model.clone()
+                },
+            }
+        } else {
+            AiProvider::DeepSeek {
+                api_key: self.deepseek_api_key.clone(),
+            }
         }
     }
 }

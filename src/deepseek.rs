@@ -6,7 +6,44 @@ use crate::replies::ReplyRow;
 use crate::utils::strip_html;
 
 const CHUNK_CHARS: usize = 15_000;
-const MODEL: &str = "deepseek-v4-flash";
+const DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
+const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/chat/completions";
+const OLLAMA_BASE_URL: &str = "https://ollama.com/v1/chat/completions";
+
+/// LLM provider configuration.
+#[derive(Clone)]
+pub enum AiProvider {
+    DeepSeek { api_key: String },
+    Ollama { api_key: String, model: String },
+}
+
+impl AiProvider {
+    fn base_url(&self) -> &str {
+        match self {
+            AiProvider::DeepSeek { .. } => DEEPSEEK_BASE_URL,
+            AiProvider::Ollama { .. } => OLLAMA_BASE_URL,
+        }
+    }
+
+    fn api_key(&self) -> &str {
+        match self {
+            AiProvider::DeepSeek { api_key } => api_key,
+            AiProvider::Ollama { api_key, .. } => api_key,
+        }
+    }
+
+    fn model(&self) -> &str {
+        match self {
+            AiProvider::DeepSeek { .. } => DEEPSEEK_MODEL,
+            AiProvider::Ollama { model, .. } => model,
+        }
+    }
+
+    /// Whether to include `response_format: json_object` in requests.
+    fn use_json_mode(&self) -> bool {
+        matches!(self, AiProvider::DeepSeek { .. })
+    }
+}
 
 /// Truncate `s` to at most `max_chars` characters at a valid UTF-8 boundary.
 fn safe_truncate(s: &str, max_chars: usize) -> &str {
@@ -197,7 +234,7 @@ const QA_AGENT_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。�
 
 pub async fn agent_decide(
     client: &reqwest::Client,
-    api_key: &str,
+    provider: &AiProvider,
     question: &str,
     user_ctx: &str,
     history_ctx: &str,
@@ -221,7 +258,7 @@ pub async fn agent_decide(
         history_block, user_ctx, previous_block, question, round
     );
 
-    let result = call_deepseek(client, api_key, QA_AGENT_PROMPT, &user_prompt).await?;
+    let result = call_llm(client, provider, QA_AGENT_PROMPT, &user_prompt).await?;
     let action: AgentAction = serde_json::from_value(result.value)
         .map_err(|e| anyhow::anyhow!("解析Agent决策失败: {}，原始: {}", e, result.raw_content))?;
     Ok(action)
@@ -303,15 +340,6 @@ const POST_SYNTHESIS_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户画�
 }"#;
 
 // ── Data structures for API communication ──
-
-#[derive(Serialize)]
-struct DeepSeekRequest {
-    model: String,
-    messages: Vec<Message>,
-    max_tokens: u32,
-    #[serde(rename = "response_format")]
-    response_format: ResponseFormat,
-}
 
 #[derive(Serialize)]
 struct Message {
@@ -561,20 +589,40 @@ pub struct DeepSeekResult {
     pub raw_content: String,
 }
 
-async fn call_deepseek(client: &reqwest::Client, api_key: &str, system_prompt: &str, user_prompt: &str) -> Result<DeepSeekResult> {
-    let request = DeepSeekRequest {
-        model: MODEL.to_string(),
+#[derive(Serialize)]
+struct LlmRequest {
+    model: String,
+    messages: Vec<Message>,
+    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ResponseFormat>,
+}
+
+async fn call_llm(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<DeepSeekResult> {
+    let response_format = if provider.use_json_mode() {
+        Some(ResponseFormat { type_: "json_object".to_string() })
+    } else {
+        None
+    };
+
+    let request = LlmRequest {
+        model: provider.model().to_string(),
         messages: vec![
             Message { role: "system".to_string(), content: system_prompt.to_string() },
             Message { role: "user".to_string(), content: user_prompt.to_string() },
         ],
         max_tokens: 8192,
-        response_format: ResponseFormat { type_: "json_object".to_string() },
+        response_format,
     };
 
     let resp = client
-        .post("https://api.deepseek.com/chat/completions")
-        .header("Authorization", format!("Bearer {}", api_key))
+        .post(provider.base_url())
+        .header("Authorization", format!("Bearer {}", provider.api_key()))
         .header("Content-Type", "application/json")
         .json(&request)
         .send()
@@ -583,21 +631,20 @@ async fn call_deepseek(client: &reqwest::Client, api_key: &str, system_prompt: &
     let status = resp.status();
     let raw_text = resp.text().await?;
 
-    // Try to deserialize the raw text; on failure, include the raw response for debugging
     let body: DeepSeekResponse = serde_json::from_str(&raw_text)
         .map_err(|e| anyhow::anyhow!("解码响应失败: {}，原始响应: {}", e, safe_truncate(&raw_text, 2000)))?;
 
     if let Some(err) = body.error {
-        bail!("DeepSeek API error: {} ({:?})，原始响应: {}", err.message, err.type_, safe_truncate(&raw_text, 2000));
+        bail!("LLM API error: {} ({:?})，原始响应: {}", err.message, err.type_, safe_truncate(&raw_text, 2000));
     }
 
     if !status.is_success() {
-        bail!("DeepSeek API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
+        bail!("LLM API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
     }
 
     let content = body.choices
         .first()
-        .ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
+        .ok_or_else(|| anyhow::anyhow!("No choices in LLM response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
         .message
         .content
         .clone();
@@ -620,8 +667,12 @@ async fn call_deepseek(client: &reqwest::Client, api_key: &str, system_prompt: &
     Ok(DeepSeekResult { value, raw_content: content })
 }
 
-/// Call DeepSeek without json_object mode — returns plain text.
-async fn call_deepseek_text(client: &reqwest::Client, api_key: &str, system_prompt: &str, user_prompt: &str) -> Result<String> {
+async fn call_llm_text(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String> {
     #[derive(Serialize)]
     struct TextRequest {
         model: String,
@@ -630,7 +681,7 @@ async fn call_deepseek_text(client: &reqwest::Client, api_key: &str, system_prom
     }
 
     let request = TextRequest {
-        model: MODEL.to_string(),
+        model: provider.model().to_string(),
         messages: vec![
             Message { role: "system".to_string(), content: system_prompt.to_string() },
             Message { role: "user".to_string(), content: user_prompt.to_string() },
@@ -639,8 +690,8 @@ async fn call_deepseek_text(client: &reqwest::Client, api_key: &str, system_prom
     };
 
     let resp = client
-        .post("https://api.deepseek.com/chat/completions")
-        .header("Authorization", format!("Bearer {}", api_key))
+        .post(provider.base_url())
+        .header("Authorization", format!("Bearer {}", provider.api_key()))
         .header("Content-Type", "application/json")
         .json(&request)
         .send()
@@ -653,16 +704,16 @@ async fn call_deepseek_text(client: &reqwest::Client, api_key: &str, system_prom
         .map_err(|e| anyhow::anyhow!("解码响应失败: {}，原始响应: {}", e, safe_truncate(&raw_text, 2000)))?;
 
     if let Some(err) = body.error {
-        bail!("DeepSeek API error: {} ({:?})，原始响应: {}", err.message, err.type_, safe_truncate(&raw_text, 2000));
+        bail!("LLM API error: {} ({:?})，原始响应: {}", err.message, err.type_, safe_truncate(&raw_text, 2000));
     }
 
     if !status.is_success() {
-        bail!("DeepSeek API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
+        bail!("LLM API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
     }
 
     let content = body.choices
         .first()
-        .ok_or_else(|| anyhow::anyhow!("No choices in DeepSeek response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
+        .ok_or_else(|| anyhow::anyhow!("No choices in LLM response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
         .message
         .content
         .clone();
@@ -695,7 +746,7 @@ pub fn format_posts_context(posts: &[PostRow]) -> String {
 /// Returns (parsed JSON, raw AI content) so callers can log failures.
 pub async fn analyze_batch(
     client: &reqwest::Client,
-    api_key: &str,
+    provider: &AiProvider,
     replies: &[ReplyRow],
     posts_context: Option<&str>,
 ) -> Result<(serde_json::Value, String)> {
@@ -712,20 +763,20 @@ pub async fn analyze_batch(
         _ => replies_text,
     };
 
-    let result = call_deepseek(client, api_key, BATCH_SYSTEM_PROMPT, &user_prompt).await?;
+    let result = call_llm(client, provider, BATCH_SYSTEM_PROMPT, &user_prompt).await?;
     Ok((result.value, result.raw_content))
 }
 
 /// Synthesize all batch results into a final user portrait.
 pub async fn synthesize_results(
     client: &reqwest::Client,
-    api_key: &str,
+    provider: &AiProvider,
     batch_results: &[serde_json::Value],
 ) -> Result<AiAnalysisResult> {
     let batch_results_json = serde_json::to_string_pretty(batch_results)?;
     let user_prompt = format!("以下为该用户所有批次的AI分析结果，请综合生成完整用户画像：\n\n{}", batch_results_json);
 
-    let result = call_deepseek(client, api_key, SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
+    let result = call_llm(client, provider, SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
     let analysis: AiAnalysisResult = serde_json::from_value(result.value.clone())
         .map_err(|e| anyhow::anyhow!("解析AI结果失败: {}，原始响应: {}", e, serde_json::to_string(&result.value).unwrap_or_default()))?;
     Ok(analysis)
@@ -766,7 +817,7 @@ pub fn chunk_posts(posts: &[PostRow]) -> Vec<Vec<PostRow>> {
 /// Returns (parsed JSON, raw AI content) so callers can log failures.
 pub async fn analyze_post_batch(
     client: &reqwest::Client,
-    api_key: &str,
+    provider: &AiProvider,
     posts: &[PostRow],
 ) -> Result<(serde_json::Value, String)> {
     let posts_text: String = posts.iter()
@@ -779,20 +830,20 @@ pub async fn analyze_post_batch(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let result = call_deepseek(client, api_key, POST_BATCH_SYSTEM_PROMPT, &posts_text).await?;
+    let result = call_llm(client, provider, POST_BATCH_SYSTEM_PROMPT, &posts_text).await?;
     Ok((result.value, result.raw_content))
 }
 
 /// Synthesize all post batch results into a final analysis.
 pub async fn synthesize_post_results(
     client: &reqwest::Client,
-    api_key: &str,
+    provider: &AiProvider,
     batch_results: &[serde_json::Value],
 ) -> Result<AiPostAnalysisResult> {
     let batch_results_json = serde_json::to_string_pretty(batch_results)?;
     let user_prompt = format!("以下为该用户所有批次的发帖AI分析结果，请综合生成完整发帖画像：\n\n{}", batch_results_json);
 
-    let result = call_deepseek(client, api_key, POST_SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
+    let result = call_llm(client, provider, POST_SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
     let analysis: AiPostAnalysisResult = serde_json::from_value(result.value.clone())
         .map_err(|e| anyhow::anyhow!("解析AI发帖分析结果失败: {}，原始响应: {}", e, serde_json::to_string(&result.value).unwrap_or_default()))?;
     Ok(analysis)
@@ -890,7 +941,7 @@ impl UserOverview {
 /// Step 3: Generate the final answer based on query results and user overview.
 pub async fn generate_answer(
     client: &reqwest::Client,
-    api_key: &str,
+    provider: &AiProvider,
     question: &str,
     _username: &str,
     overview: &UserOverview,
@@ -920,7 +971,7 @@ pub async fn generate_answer(
         history_block, overview_text, context, question
     );
 
-    call_deepseek_text(client, api_key, QA_ANSWER_PROMPT, &user_prompt).await
+    call_llm_text(client, provider, QA_ANSWER_PROMPT, &user_prompt).await
 }
 
 /// Format conversation history entries into a context string.

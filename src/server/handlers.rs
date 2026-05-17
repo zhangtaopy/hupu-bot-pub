@@ -410,10 +410,10 @@ pub async fn start_ai_analysis(
             })));
         }
     };
-    if cfg.deepseek_api_key.is_empty() {
+    if cfg.deepseek_api_key.is_empty() && cfg.ollama_api_key.is_empty() {
         return Ok(Json(serde_json::json!({
             "status": "error",
-            "error": "未配置 DeepSeek API Key，请在 config.json 中添加 deepseek_api_key",
+            "error": "未配置 AI API Key（请在 config.json 中添加 deepseek_api_key 或 ollama_api_key）",
         })));
     }
 
@@ -528,10 +528,10 @@ pub async fn start_ai_post_analysis(
             })));
         }
     };
-    if cfg.deepseek_api_key.is_empty() {
+    if cfg.deepseek_api_key.is_empty() && cfg.ollama_api_key.is_empty() {
         return Ok(Json(serde_json::json!({
             "status": "error",
-            "error": "未配置 DeepSeek API Key",
+            "error": "未配置 AI API Key（请在 config.json 中添加 deepseek_api_key 或 ollama_api_key）",
         })));
     }
 
@@ -704,12 +704,14 @@ pub async fn qa_ask(
 
     let validation_err: Option<String> = match crate::config::try_get() {
         None => Some("请先配置 Cookie".into()),
-        Some(c) if c.deepseek_api_key.is_empty() => Some("未配置 DeepSeek API Key".into()),
+        Some(c) if c.deepseek_api_key.is_empty() && c.ollama_api_key.is_empty() => {
+            Some("未配置 AI API Key（请在 config.json 中添加 deepseek_api_key 或 ollama_api_key）".into())
+        }
         _ if body.question.trim().is_empty() => Some("问题不能为空".into()),
         Some(c) => {
             let db_path = state.db_path.clone();
             let http_client = state.http_client.clone();
-            let api_key = c.deepseek_api_key.clone();
+            let provider = c.ai_provider();
             let question = body.question;
             let euid = body.euid;
             let history = body.history;
@@ -717,7 +719,7 @@ pub async fn qa_ask(
 
             tokio::spawn(async move {
                 if let Err(e) = crate::services::qa::run_qa_streaming(
-                    &db_path, &http_client, &api_key, &euid, &question, &history, &tx_agent,
+                    &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
                 ).await {
                     let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
                         "type": "error", "error": e.to_string()

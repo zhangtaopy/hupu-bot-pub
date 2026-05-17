@@ -73,10 +73,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
             return;
         }
     };
-    if cfg.deepseek_api_key.is_empty() {
-        set_progress(&state, "error", 0, 0, true, Some("未配置 DeepSeek API Key".into()));
-        return;
-    }
+    let provider = cfg.ai_provider();
 
     let mut sorted = all_replies.clone();
     sorted.sort_by(|a, b| a.create_time.cmp(&b.create_time));
@@ -88,7 +85,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
     let max_concurrency = cfg.deepseek_max_concurrency.max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let failed_count = Arc::new(AtomicUsize::new(0));
-    let api_key = cfg.deepseek_api_key.clone();
+    let provider2 = provider.clone();
     let client = state.http_client.clone();
     let db_path = state.db_path.clone();
     let euid_clone = euid.clone();
@@ -101,7 +98,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
     while next_idx < initial_batch {
         let i = next_idx;
         let chunk = chunks[i].clone();
-        let api_key = api_key.clone();
+        let provider = provider2.clone();
         let client = client.clone();
         let db_path = db_path.clone();
         let euid_c = euid_clone.clone();
@@ -109,7 +106,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
         join_set.spawn(async move {
             let ctx_ref = posts_ctx.as_deref();
             let result =
-                crate::deepseek::analyze_batch(&client, &api_key, &chunk, ctx_ref).await;
+                crate::deepseek::analyze_batch(&client, &provider, &chunk, ctx_ref).await;
             if let Err(ref e) = result {
                 if let Ok(conn) = crate::db::open_db(&db_path) {
                     let _ = crate::db::save_batch_error(
@@ -145,7 +142,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
         if next_idx < total_chunks {
             let i = next_idx;
             let chunk = chunks[i].clone();
-            let api_key = api_key.clone();
+            let provider = provider2.clone();
             let client = client.clone();
             let db_path = db_path.clone();
             let euid_c = euid_clone.clone();
@@ -153,7 +150,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
             join_set.spawn(async move {
                 let ctx_ref = posts_ctx.as_deref();
                 let result =
-                    crate::deepseek::analyze_batch(&client, &api_key, &chunk, ctx_ref).await;
+                    crate::deepseek::analyze_batch(&client, &provider, &chunk, ctx_ref).await;
                 if let Err(ref e) = result {
                     if let Ok(conn) = crate::db::open_db(&db_path) {
                         let _ = crate::db::save_batch_error(
@@ -189,7 +186,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
     set_progress(&state, &synth_phase, total_chunks, total_chunks, false, None);
     let synthesis_result = match crate::deepseek::synthesize_results(
         &client,
-        &cfg.deepseek_api_key,
+        &provider2,
         &batch_results,
     )
     .await
@@ -277,10 +274,7 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
             return;
         }
     };
-    if cfg.deepseek_api_key.is_empty() {
-        set_progress(&state, "error", 0, 0, true, Some("未配置 DeepSeek API Key".into()));
-        return;
-    }
+    let provider = cfg.ai_provider();
 
     let mut sorted = all_posts.clone();
     sorted.sort_by(|a, b| a.create_time.cmp(&b.create_time));
@@ -292,7 +286,7 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
     let max_concurrency = cfg.deepseek_max_concurrency.max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let failed_count = Arc::new(AtomicUsize::new(0));
-    let api_key = cfg.deepseek_api_key.clone();
+    let provider2 = provider.clone();
     let client = state.http_client.clone();
     let db_path = state.db_path.clone();
     let euid_clone = euid.clone();
@@ -305,13 +299,13 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
     while next_idx < initial_batch {
         let i = next_idx;
         let chunk = chunks[i].clone();
-        let api_key = api_key.clone();
+        let provider = provider2.clone();
         let client = client.clone();
         let db_path = db_path.clone();
         let euid_c = euid_clone.clone();
         join_set.spawn(async move {
             let result =
-                crate::deepseek::analyze_post_batch(&client, &api_key, &chunk).await;
+                crate::deepseek::analyze_post_batch(&client, &provider, &chunk).await;
             if let Err(ref e) = result {
                 if let Ok(conn) = crate::db::open_db(&db_path) {
                     let _ = crate::db::save_batch_error(
@@ -347,13 +341,13 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
         if next_idx < total_chunks {
             let i = next_idx;
             let chunk = chunks[i].clone();
-            let api_key = api_key.clone();
+            let provider = provider2.clone();
             let client = client.clone();
             let db_path = db_path.clone();
             let euid_c = euid_clone.clone();
             join_set.spawn(async move {
                 let result =
-                    crate::deepseek::analyze_post_batch(&client, &api_key, &chunk).await;
+                    crate::deepseek::analyze_post_batch(&client, &provider, &chunk).await;
                 if let Err(ref e) = result {
                     if let Ok(conn) = crate::db::open_db(&db_path) {
                         let _ = crate::db::save_batch_error(
@@ -389,7 +383,7 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
     set_progress(&state, &synth_phase, total_chunks, total_chunks, false, None);
     let synthesis_result = match crate::deepseek::synthesize_post_results(
         &client,
-        &cfg.deepseek_api_key,
+        &provider2,
         &batch_results,
     )
     .await

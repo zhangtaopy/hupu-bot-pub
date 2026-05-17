@@ -147,8 +147,8 @@
             <li>刷新页面，点击任意请求，在 Request Headers 中找到 Cookie</li>
             <li>复制整个 Cookie 值粘贴到下方</li>
           </ol>
-          <p class="text-sm text-indigo-700 font-medium mt-3 mb-1">DeepSeek API Key（可选）：</p>
-          <p class="text-xs text-indigo-600/80">用于 AI 分析功能，可在 <a href="https://platform.deepseek.com" target="_blank" class="underline hover:text-indigo-800">platform.deepseek.com</a> 申请</p>
+          <p class="text-sm text-indigo-700 font-medium mt-3 mb-1">AI 配置（可选）：</p>
+          <p class="text-xs text-indigo-600/80">用于 AI 分析功能，支持 DeepSeek 或 Ollama Cloud</p>
         </div>
         <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
         <div class="mb-4">
@@ -156,9 +156,21 @@
           <textarea v-model="configCookie" rows="3" placeholder="粘贴你的虎扑 Cookie..."
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200 resize-none font-mono text-xs"></textarea>
         </div>
-        <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">DeepSeek API Key <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
-          <input v-model="configDeepseekKey" type="text" placeholder="sk-..."
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">AI 提供商 <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
+          <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+            <option value="deepseek">DeepSeek</option>
+            <option value="ollama">Ollama Cloud</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek API Key' : 'Ollama API Key' }} <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
+          <input v-model="configAiKey" type="text" :placeholder="configProvider === 'deepseek' ? 'sk-...' : 'ollama-api-key...'"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+        </div>
+        <div class="mb-6" v-if="configProvider === 'ollama'">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Ollama 模型名</label>
+          <input v-model="configOllamaModel" type="text" placeholder="gpt-oss:120b"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig" :disabled="configSaving || !configCookie.trim()"
@@ -171,8 +183,8 @@
     </div>
   </div>
 
-  <!-- ── DeepSeek API Key Setup Overlay (cookie already configured) ── -->
-  <div v-if="!needsConfig && needsDeepseekKey" class="fixed inset-0 z-[100] flex items-center justify-center" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%);">
+  <!-- ── AI Key Setup Overlay (cookie already configured) ── -->
+  <div v-if="!needsConfig && needsAiKey" class="fixed inset-0 z-[100] flex items-center justify-center" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%);">
     <div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
     <div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
     <div class="w-full max-w-md mx-4 relative">
@@ -181,17 +193,29 @@
           <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">AI</div>
           <div>
             <h1 class="text-xl font-bold text-gray-800">完善 AI 配置</h1>
-            <p class="text-xs text-gray-400">Cookie 已配置，补充 DeepSeek API Key</p>
+            <p class="text-xs text-gray-400">Cookie 已配置，补充 AI API Key</p>
           </div>
         </div>
         <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 border border-indigo-100">
-          <p class="text-sm text-indigo-700 font-medium mb-2">DeepSeek API Key</p>
-          <p class="text-xs text-indigo-600/80">用于 AI 智能分析功能（用户画像、发帖分析等），可在 <a href="https://platform.deepseek.com" target="_blank" class="underline hover:text-indigo-800">platform.deepseek.com</a> 申请。不填写则 AI 分析功能不可用。</p>
+          <p class="text-sm text-indigo-700 font-medium mb-2">AI 提供商配置</p>
+          <p class="text-xs text-indigo-600/80">用于 AI 智能分析功能（用户画像、发帖分析等），支持 DeepSeek 和 Ollama Cloud。不填写则 AI 分析功能不可用。</p>
         </div>
         <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
-        <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">DeepSeek API Key</label>
-          <input v-model="configDeepseekKey" type="text" placeholder="sk-..."
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">AI 提供商</label>
+          <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+            <option value="deepseek">DeepSeek</option>
+            <option value="ollama">Ollama Cloud</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ configProvider === 'deepseek' ? 'DeepSeek API Key' : 'Ollama API Key' }}</label>
+          <input v-model="configAiKey" type="text" :placeholder="configProvider === 'deepseek' ? 'sk-...' : 'ollama-api-key...'"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+        </div>
+        <div class="mb-6" v-if="configProvider === 'ollama'">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Ollama 模型名</label>
+          <input v-model="configOllamaModel" type="text" placeholder="gpt-oss:120b"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig"
@@ -199,7 +223,7 @@
           <span v-if="configSaving">保存中...</span>
           <span v-else>保存配置</span>
         </button>
-        <button @click="skipDeepseekSetup"
+        <button @click="skipAiKeySetup"
           class="w-full mt-3 py-2.5 rounded-xl text-gray-500 font-medium text-sm transition-all duration-200 hover:text-gray-700 hover:bg-gray-100">
           跳过，稍后设置
         </button>
@@ -486,7 +510,7 @@
     <div v-if="aiPostResult" class="max-w-6xl mx-auto px-4 mt-6">
       <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
         <span class="section-dot purple"></span> 发帖 AI 智能分析
-        <span class="text-xs font-normal text-gray-400 ml-2">基于 DeepSeek</span>
+        <span class="text-xs font-normal text-gray-400 ml-2">AI 分析</span>
       </h2>
 
       <!-- User Portrait -->
@@ -782,7 +806,7 @@
     <div v-if="aiResult" class="max-w-6xl mx-auto px-4 mt-6">
       <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
         <span class="section-dot purple"></span> AI 智能分析
-        <span class="text-xs font-normal text-gray-400 ml-2">基于 DeepSeek</span>
+        <span class="text-xs font-normal text-gray-400 ml-2">AI 分析</span>
       </h2>
 
       <!-- User Portrait -->
@@ -1218,11 +1242,13 @@ createApp({
 
     // Config setup state
     const needsConfig = ref(false);
-    const needsDeepseekKey = ref(false);
+    const needsAiKey = ref(false);
     const configSaving = ref(false);
     const configError = ref('');
     const configCookie = ref('');
-    const configDeepseekKey = ref('');
+    const configProvider = ref('deepseek');
+    const configAiKey = ref('');
+    const configOllamaModel = ref('gpt-oss:120b');
     const userInfo = ref(null);
     const stats = ref(null);
     const groups = ref([]);
@@ -1791,7 +1817,7 @@ createApp({
       if (!euid.value.trim() || !stats.value) return;
 
       if (aiResult.value) {
-        if (!confirm('该用户已有AI分析结果，是否重新分析？这将消耗 DeepSeek API 额度。')) {
+        if (!confirm('该用户已有AI分析结果，是否重新分析？这将消耗 AI API 额度。')) {
           return;
         }
       }
@@ -2088,7 +2114,7 @@ createApp({
       if (!euid.value.trim() || !postsData.value.length) return;
 
       if (aiPostResult.value) {
-        if (!confirm('该用户已有AI发帖分析结果，是否重新分析？这将消耗 DeepSeek API 额度。')) {
+        if (!confirm('该用户已有AI发帖分析结果，是否重新分析？这将消耗 AI API 额度。')) {
           return;
         }
       }
@@ -2263,7 +2289,7 @@ createApp({
         if (res.ok) {
           const data = await res.json();
           needsConfig.value = !data.configured;
-          needsDeepseekKey.value = data.configured && !data.has_deepseek_key;
+          needsAiKey.value = data.configured && !data.has_deepseek_key && !data.has_ollama_key;
         }
       } catch (e) {
         needsConfig.value = true;
@@ -2274,9 +2300,20 @@ createApp({
       configSaving.value = true;
       configError.value = '';
       try {
-        const payload = needsDeepseekKey.value
-          ? { cookie: '', deepseek_api_key: configDeepseekKey.value }
-          : { cookie: configCookie.value, deepseek_api_key: configDeepseekKey.value };
+        const isDeepseek = configProvider.value === 'deepseek';
+        const payload = needsAiKey.value
+          ? {
+              cookie: '',
+              deepseek_api_key: isDeepseek ? configAiKey.value : '',
+              ollama_api_key: isDeepseek ? '' : configAiKey.value,
+              ollama_model: isDeepseek ? '' : configOllamaModel.value,
+            }
+          : {
+              cookie: configCookie.value,
+              deepseek_api_key: isDeepseek ? configAiKey.value : '',
+              ollama_api_key: isDeepseek ? '' : configAiKey.value,
+              ollama_model: isDeepseek ? '' : configOllamaModel.value,
+            };
         const res = await fetch('/api/config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2294,8 +2331,8 @@ createApp({
       }
     }
 
-    function skipDeepseekSetup() {
-      needsDeepseekKey.value = false;
+    function skipAiKeySetup() {
+      needsAiKey.value = false;
     }
 
     onMounted(async () => {
@@ -2305,7 +2342,7 @@ createApp({
       }
     });
 
-    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsDeepseekKey, skipDeepseekSetup, configSaving, configError, configCookie, configDeepseekKey, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
+    return { activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configOllamaModel, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail };
   }
 }).mount('#app');
 </script>

@@ -50,7 +50,7 @@ fn sse_answer_event(answer: &str, username: &str, detail: &str) -> String {
 pub async fn run_qa_streaming(
     db_path: &std::path::Path,
     http_client: &reqwest::Client,
-    api_key: &str,
+    provider: &crate::deepseek::AiProvider,
     euid: &str,
     question: &str,
     history: &[crate::server::types::HistoryEntry],
@@ -63,7 +63,7 @@ pub async fn run_qa_streaming(
     let history_ctx = crate::deepseek::format_history(history);
 
     let (answer, traces) = agent_loop(
-        db_path, http_client, api_key, question, euid, &ctx, &history_ctx, Some(event_tx),
+        db_path, http_client, provider, question, euid, &ctx, &history_ctx, Some(event_tx),
     ).await?;
 
     let detail = build_prompt_detail(&traces, &ctx.user_ctx_text);
@@ -77,7 +77,7 @@ pub async fn run_qa_streaming(
 async fn agent_loop(
     db_path: &std::path::Path,
     http_client: &reqwest::Client,
-    api_key: &str,
+    provider: &crate::deepseek::AiProvider,
     question: &str,
     euid: &str,
     ctx: &UserContext,
@@ -96,7 +96,7 @@ async fn agent_loop(
     let max_rounds = 5;
     for round in 1..=max_rounds {
         let action = crate::deepseek::agent_decide(
-            http_client, api_key, question, &ctx.user_ctx_text, history_ctx,
+            http_client, provider, question, &ctx.user_ctx_text, history_ctx,
             &previous_rounds_text, round,
         ).await?;
 
@@ -173,7 +173,7 @@ async fn agent_loop(
             ctx.ai_post_summary.clone(), ctx.ai_reply_personal_info.clone(),
         )?;
         final_answer = crate::deepseek::generate_answer(
-            http_client, api_key, question, &ctx.username, &overview,
+            http_client, provider, question, &ctx.username, &overview,
             &all_replies, &all_posts, history_ctx,
         ).await?;
         let trace = AgentTrace {
