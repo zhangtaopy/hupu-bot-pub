@@ -13,7 +13,7 @@
 - **获取回帖**: 抓取用户的所有回帖记录并存入数据库
 - **获取发帖**: 抓取用户的发帖记录并存入数据库
 - **相似度分析**: 分析用户回帖中的重复/近似内容，识别复读模式
-- **AI 智能分析**: 基于 DeepSeek API 对用户的回帖/发帖进行深度画像分析
+- **AI 智能分析**: 基于 AI 对用户的回帖/发帖进行深度画像分析
 - **Web 可视化**: 启动 Web 服务，通过图表、词云、AI 分析报告等形式展示数据
 
 ## 安装
@@ -34,14 +34,18 @@ cp config.example.json config.json
 ```json
 {
   "cookie": "smidV2=...; u=...; csrfToken=...; ...",
-  "deepseek_api_key": "sk-..."
+  "provider": "deepseek",
+  "api_key": "sk-..."
 }
 ```
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `cookie` | 是 | 虎扑登录 Cookie，从浏览器 DevTools 复制，需包含 `smidV2` 字段 |
-| `deepseek_api_key` | 否 | DeepSeek API Key，用于 AI 智能分析功能 |
+| `provider` | 否 | AI 提供商：`deepseek` / `ollama` / `openrouter` / `opencode`（默认 deepseek） |
+| `api_key` | 否 | AI API Key，用于 AI 智能分析功能 |
+| `model` | 否 | 模型名，为空自动使用对应 provider 的默认模型 |
+| `max_concurrency` | 否 | AI 请求最大并发数（默认 3） |
 
 > `puid` 和 `shumei_id` 会自动从 cookie 中的 `u` 和 `smidV2` 字段解析，无需手动配置。
 
@@ -88,7 +92,7 @@ cargo run -- extract-cookies
 - 如果浏览器已经在运行，后台进程会阻止调试端口开启，程序会提示你确认关闭进程
 - 登录超时时间为 5 分钟，超时后需要重新运行
 - Cookie 中的 `puid` 和 `shumei_id` 会自动解析
-- 已有的 `deepseek_api_key` 等配置会被保留
+- 已有的 `provider` / `api_key` 等配置会被保留
 
 ### 点赞回复
 
@@ -379,13 +383,13 @@ cargo run -- serve -p 8080
   - 点亮统计（总点亮、平均点亮、最高点亮）
   - 回帖最多的帖子排行
 - **相似回帖组**: 展示聚类结果，可展开查看每条详情
-- **AI 智能分析**: 基于 DeepSeek 的用户画像（关注领域、立场倾向、核心观点、行为模式）
+- **AI 智能分析**: 基于 AI 的用户画像（关注领域、立场倾向、核心观点、行为模式）
 
 #### 发帖数据
 - **统计概览**: 总发帖数、总回复、总浏览、总点亮、视频帖数
 - **发帖板块分布**: 环形图
 - **发帖列表**: 展示标题、板块、视频/图片标记、互动数据
-- **AI 智能分析**: 基于 DeepSeek 的发帖画像（内容风格、话题焦点、互动分析）
+- **AI 智能分析**: 基于 AI 的发帖画像（内容风格、话题焦点、互动分析）
 
 
 #### 通用功能
@@ -456,7 +460,7 @@ cargo run -- <command> [args...]
 2. `smidV2` 与你的设备绑定，通常不会经常变化
 3. 板块 ID 可以从抓包的 `topicId` 字段获取
 4. 帖子 ID 即帖子 URL 中的数字部分
-5. AI 分析功能需要配置 `deepseek_api_key`，每次分析会消耗 API 额度
+5. AI 分析功能需要配置 `api_key`（在 `config.json` 中设置 `provider` 和 `api_key`），每次分析会消耗 API 额度
 6. 首次使用 `replies` / `posts` 命令会创建 `hupu.db` 数据库文件
 7. 回帖数据是 Web 分析的基础，需要先通过 `replies` 命令抓取数据，再启动 Web 服务查看
 
