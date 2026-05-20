@@ -143,8 +143,8 @@ enum Commands {
         #[arg(short = 'e', long)]
         euid: String,
 
-        /// 最大获取页数
-        #[arg(short = 'p', long, default_value = "10")]
+        /// 最大获取页数（0=自动获取全部）
+        #[arg(short = 'p', long, default_value = "0")]
         max_pages: u32,
 
         /// 每页条数
@@ -162,8 +162,8 @@ enum Commands {
         #[arg(short = 'e', long)]
         euid: String,
 
-        /// 最大获取页数
-        #[arg(short = 'p', long, default_value = "5")]
+        /// 最大获取页数（0=自动获取全部）
+        #[arg(short = 'p', long, default_value = "0")]
         max_pages: u32,
 
         /// 输出格式: table, json, simple

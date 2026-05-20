@@ -255,7 +255,7 @@ pub async fn fetch_replies_paginated(
 
         pages_fetched += 1;
 
-        if !result.has_next_page || pages_fetched >= max_pages {
+        if !result.has_next_page || (max_pages > 0 && pages_fetched >= max_pages) {
             break;
         }
 

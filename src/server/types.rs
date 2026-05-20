@@ -77,13 +77,13 @@ pub struct PostsQuery {
 }
 
 fn default_fetch_replies_max_pages() -> u32 {
-    50
+    0
 }
 fn default_fetch_replies_page_size() -> u32 {
     10
 }
 fn default_fetch_posts_max_pages() -> u32 {
-    5
+    0
 }
 fn default_posts_limit() -> usize {
     100

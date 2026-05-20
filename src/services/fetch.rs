@@ -20,7 +20,8 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
         }
     };
 
-    set_progress(&state, "准备中", 0, max_pages as usize, false, None);
+    let total_hint = if max_pages > 0 { max_pages as usize } else { 0 };
+    set_progress(&state, "准备中", 0, total_hint, false, None);
 
     let cfg = match crate::config::try_get() {
         Some(cfg) => cfg,
@@ -39,9 +40,14 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
 
     let mut total_fetched = 0usize;
 
-    for page in 1..=max_pages {
-        let phase = format!("获取第 {} 页", page);
-        set_progress(&state, &phase, page as usize, max_pages as usize, false, None);
+    let mut page = 1u32;
+    loop {
+        let phase = if max_pages > 0 {
+            format!("获取第 {} / {} 页", page, max_pages)
+        } else {
+            format!("获取第 {} 页", page)
+        };
+        set_progress(&state, &phase, page as usize, if max_pages > 0 { max_pages as usize } else { page as usize }, false, None);
 
         let posts = match crate::posts::fetch_posts_page(&client, &euid, page).await {
             Ok(p) => p,
@@ -90,12 +96,13 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
             }
         }
 
-        if (count as u32) < crate::posts::PAGE_SIZE {
+        if (count as u32) < crate::posts::PAGE_SIZE || (max_pages > 0 && page >= max_pages) {
             break;
         }
+        page += 1;
     }
 
-    set_progress(&state, "完成", total_fetched, max_pages as usize, true, None);
+    set_progress(&state, "完成", total_fetched, total_fetched, true, None);
 }
 
 pub async fn run_fetch_replies_background(
@@ -121,7 +128,8 @@ pub async fn run_fetch_replies_background(
         }
     };
 
-    set_progress(&state, "准备中", 0, max_pages as usize, false, None);
+    let total_hint = if max_pages > 0 { max_pages as usize } else { 0 };
+    set_progress(&state, "准备中", 0, total_hint, false, None);
 
     let cfg = match crate::config::try_get() {
         Some(cfg) => cfg,
@@ -143,12 +151,18 @@ pub async fn run_fetch_replies_background(
     let now_ts = chrono::Local::now().timestamp();
     let mut max_time: Option<i64> = Some(now_ts);
 
-    for page in 1..=max_pages {
+    let mut page = 1u32;
+    loop {
+        let phase = if max_pages > 0 {
+            format!("获取第 {} / {} 页", page, max_pages)
+        } else {
+            format!("获取第 {} 页", page)
+        };
         set_progress(
             &state,
-            &format!("获取第 {} 页", page),
+            &phase,
             page as usize,
-            max_pages as usize,
+            if max_pages > 0 { max_pages as usize } else { page as usize },
             false,
             None,
         );
@@ -159,7 +173,7 @@ pub async fn run_fetch_replies_background(
                 total_fetched += count;
                 all_items.extend(result.items);
 
-                if !result.has_next_page || page >= max_pages {
+                if !result.has_next_page || (max_pages > 0 && page >= max_pages) {
                     break;
                 }
                 max_time = result.max_time;
@@ -176,9 +190,10 @@ pub async fn run_fetch_replies_background(
                 return;
             }
         }
+        page += 1;
     }
 
-    set_progress(&state, "写入数据库", total_fetched, max_pages as usize, false, None);
+    set_progress(&state, "写入数据库", total_fetched, total_fetched, false, None);
 
     let conn = match crate::db::open_db(&state.db_path) {
         Ok(c) => c,
@@ -200,5 +215,5 @@ pub async fn run_fetch_replies_background(
         return;
     }
 
-    set_progress(&state, "完成", total_fetched, max_pages as usize, true, None);
+    set_progress(&state, "完成", total_fetched, total_fetched, true, None);
 }

@@ -97,7 +97,8 @@ pub async fn fetch_posts_paginated(
 ) -> Result<Vec<PostRow>> {
     let mut all_posts = Vec::new();
 
-    for page in 1..=max_pages {
+    let mut page = 1u32;
+    loop {
         let posts = fetch_posts_page(client, euid, page).await?;
 
         let count = posts.len();
@@ -106,9 +107,10 @@ pub async fn fetch_posts_paginated(
 
         all_posts.extend(posts);
 
-        if (count as u32) < PAGE_SIZE {
+        if (count as u32) < PAGE_SIZE || (max_pages > 0 && page >= max_pages) {
             break;
         }
+        page += 1;
     }
 
     Ok(all_posts)
