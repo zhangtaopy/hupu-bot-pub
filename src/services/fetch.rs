@@ -47,7 +47,9 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
         } else {
             format!("获取第 {} 页", page)
         };
-        set_progress(&state, &phase, page as usize, if max_pages > 0 { max_pages as usize } else { page as usize }, false, None);
+        let cur = if max_pages > 0 { page as usize } else { total_fetched };
+        let tot = if max_pages > 0 { max_pages as usize } else { 0 };
+        set_progress(&state, &phase, cur, tot, false, None);
 
         let posts = match crate::posts::fetch_posts_page(&client, &euid, page).await {
             Ok(p) => p,
@@ -55,8 +57,8 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
                 set_progress(
                     &state,
                     "error",
-                    page as usize,
-                    max_pages as usize,
+                    cur,
+                    tot,
                     true,
                     Some(format!("获取第{}页失败: {}", page, e)),
                 );
@@ -74,8 +76,8 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
                         set_progress(
                             &state,
                             "error",
-                            page as usize,
-                            max_pages as usize,
+                            total_fetched,
+                            tot,
                             true,
                             Some(format!("数据库写入失败: {}", e)),
                         );
@@ -86,8 +88,8 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
                     set_progress(
                         &state,
                         "error",
-                        page as usize,
-                        max_pages as usize,
+                        total_fetched,
+                        tot,
                         true,
                         Some(format!("数据库打开失败: {}", e)),
                     );
@@ -158,11 +160,13 @@ pub async fn run_fetch_replies_background(
         } else {
             format!("获取第 {} 页", page)
         };
+        let cur = if max_pages > 0 { page as usize } else { total_fetched };
+        let tot = if max_pages > 0 { max_pages as usize } else { 0 };
         set_progress(
             &state,
             &phase,
-            page as usize,
-            if max_pages > 0 { max_pages as usize } else { page as usize },
+            cur,
+            tot,
             false,
             None,
         );
@@ -182,8 +186,8 @@ pub async fn run_fetch_replies_background(
                 set_progress(
                     &state,
                     "error",
-                    page as usize,
-                    max_pages as usize,
+                    cur,
+                    tot,
                     true,
                     Some(format!("获取第{}页失败: {}", page, e)),
                 );

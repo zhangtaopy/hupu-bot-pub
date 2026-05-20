@@ -35,21 +35,22 @@
     .animate-card:nth-child(4) { animation-delay: 0.15s; }
     .animate-card:nth-child(5) { animation-delay: 0.2s; }
 
-    /* ── Shimmer ── */
-    @keyframes shimmer {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(200%); }
+    /* ── Indeterminate progress bar ── */
+    @keyframes indeterminate {
+      0% { left: -35%; width: 35%; }
+      50% { left: 50%; width: 30%; }
+      100% { left: 105%; width: 35%; }
     }
-    .shimmer-bar {
+    .indeterminate-bar {
       position: relative;
-      overflow: hidden;
     }
-    .shimmer-bar::after {
+    .indeterminate-bar::after {
       content: '';
       position: absolute;
-      inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-      animation: shimmer 1.5s infinite;
+      top: 0; bottom: 0;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, transparent, var(--bar-color, rgba(99,102,241,0.8)), transparent);
+      animation: indeterminate 1.8s ease-in-out infinite;
     }
 
     /* ── Gradient texts ── */
@@ -187,8 +188,8 @@
     }
     html.dark ::-webkit-scrollbar-thumb { background: #4b5563; }
     html.dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-    html.dark .shimmer-bar::after {
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent) !important;
+    html.dark .indeterminate-bar::after {
+      background: linear-gradient(90deg, transparent, var(--bar-color-dark, rgba(165,180,252,1)), transparent);
     }
 
     /* Dark mode: header & nav */
@@ -466,15 +467,15 @@
     <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
       <div class="flex items-center justify-between mb-2.5">
         <span class="text-sm font-medium text-gray-700">{{ progressPhase || '准备中' }}</span>
-        <span v-if="progressTotal > 0" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-          {{ progressCurrent.toLocaleString() }} / {{ progressTotal.toLocaleString() }}
+        <span v-if="progressCurrent > 0" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+          {{ progressCurrent.toLocaleString() }}{{ progressTotal > 0 ? ' / ' + progressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
       <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
         <div v-if="progressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #6366f1, #8b5cf6);"
           :style="{ width: (progressCurrent / progressTotal * 100) + '%' }"></div>
-        <div v-else class="h-2 rounded-full shimmer-bar" style="background: linear-gradient(90deg, #6366f1, #8b5cf6); width: 35%"></div>
+        <div v-else class="h-2 rounded-full indeterminate-bar" style="--bar-color: rgba(99,102,241,0.8); --bar-color-dark: rgba(165,180,252,0.9);"></div>
       </div>
     </div>
   </div>
@@ -484,15 +485,15 @@
     <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
       <div class="flex items-center justify-between mb-2.5">
         <span class="text-sm font-medium text-gray-700">{{ fetchPostsProgressPhase || '获取发帖准备中' }}</span>
-        <span v-if="fetchPostsProgressTotal > 0" class="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-          {{ fetchPostsProgressCurrent.toLocaleString() }} / {{ fetchPostsProgressTotal.toLocaleString() }}
+        <span v-if="fetchPostsProgressCurrent > 0" class="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+          {{ fetchPostsProgressCurrent.toLocaleString() }}{{ fetchPostsProgressTotal > 0 ? ' / ' + fetchPostsProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
       <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
         <div v-if="fetchPostsProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #f97316, #fb923c);"
           :style="{ width: (fetchPostsProgressCurrent / fetchPostsProgressTotal * 100) + '%' }"></div>
-        <div v-else class="h-2 rounded-full shimmer-bar" style="background: linear-gradient(90deg, #f97316, #fb923c); width: 35%"></div>
+        <div v-else class="h-2 rounded-full indeterminate-bar" style="--bar-color: rgba(249,115,22,0.8); --bar-color-dark: rgba(251,191,36,0.9);"></div>
       </div>
     </div>
   </div>
@@ -502,15 +503,15 @@
     <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
       <div class="flex items-center justify-between mb-2.5">
         <span class="text-sm font-medium text-gray-700">{{ fetchRepliesProgressPhase || '获取回帖准备中' }}</span>
-        <span v-if="fetchRepliesProgressTotal > 0" class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-          {{ fetchRepliesProgressCurrent.toLocaleString() }} / {{ fetchRepliesProgressTotal.toLocaleString() }}
+        <span v-if="fetchRepliesProgressCurrent > 0" class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+          {{ fetchRepliesProgressCurrent.toLocaleString() }}{{ fetchRepliesProgressTotal > 0 ? ' / ' + fetchRepliesProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
       <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
         <div v-if="fetchRepliesProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #10b981, #34d399);"
           :style="{ width: (fetchRepliesProgressCurrent / fetchRepliesProgressTotal * 100) + '%' }"></div>
-        <div v-else class="h-2 rounded-full shimmer-bar" style="background: linear-gradient(90deg, #10b981, #34d399); width: 35%"></div>
+        <div v-else class="h-2 rounded-full indeterminate-bar" style="--bar-color: rgba(16,185,129,0.8); --bar-color-dark: rgba(52,211,153,0.9);"></div>
       </div>
     </div>
   </div>
@@ -520,15 +521,15 @@
     <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
       <div class="flex items-center justify-between mb-2.5">
         <span class="text-sm font-medium text-gray-700">{{ aiPostProgressPhase || 'AI发帖分析准备中' }}</span>
-        <span v-if="aiPostProgressTotal > 0" class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-          {{ aiPostProgressCurrent.toLocaleString() }} / {{ aiPostProgressTotal.toLocaleString() }}
+        <span v-if="aiPostProgressCurrent > 0" class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+          {{ aiPostProgressCurrent.toLocaleString() }}{{ aiPostProgressTotal > 0 ? ' / ' + aiPostProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
       <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
         <div v-if="aiPostProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #8b5cf6, #a78bfa);"
           :style="{ width: (aiPostProgressCurrent / aiPostProgressTotal * 100) + '%' }"></div>
-        <div v-else class="h-2 rounded-full shimmer-bar" style="background: linear-gradient(90deg, #8b5cf6, #a78bfa); width: 35%"></div>
+        <div v-else class="h-2 rounded-full indeterminate-bar" style="--bar-color: rgba(139,92,246,0.8); --bar-color-dark: rgba(167,139,250,0.9);"></div>
       </div>
     </div>
   </div>
@@ -538,15 +539,15 @@
     <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
       <div class="flex items-center justify-between mb-2.5">
         <span class="text-sm font-medium text-gray-700">{{ aiProgressPhase || 'AI分析准备中' }}</span>
-        <span v-if="aiProgressTotal > 0" class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-          {{ aiProgressCurrent.toLocaleString() }} / {{ aiProgressTotal.toLocaleString() }}
+        <span v-if="aiProgressCurrent > 0" class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+          {{ aiProgressCurrent.toLocaleString() }}{{ aiProgressTotal > 0 ? ' / ' + aiProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
       <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
         <div v-if="aiProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #8b5cf6, #a78bfa);"
           :style="{ width: (aiProgressCurrent / aiProgressTotal * 100) + '%' }"></div>
-        <div v-else class="h-2 rounded-full shimmer-bar" style="background: linear-gradient(90deg, #8b5cf6, #a78bfa); width: 35%"></div>
+        <div v-else class="h-2 rounded-full indeterminate-bar" style="--bar-color: rgba(139,92,246,0.8); --bar-color-dark: rgba(167,139,250,0.9);"></div>
       </div>
     </div>
   </div>
