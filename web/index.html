@@ -8,6 +8,16 @@
   <script>
     tailwind.config = {
       darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'dark-body': '#090c15',
+            'dark-surface': '#111827',
+            'dark-subtle': '#18212f',
+            'dark-elevated': '#1f2937',
+          }
+        }
+      }
     }
   </script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -16,6 +26,78 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     [v-cloak] { display: none; }
+
+    /* ── Theme tokens (auto-switch via html.dark) ── */
+    :root {
+      --body-bg: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%);
+      --group-bg: linear-gradient(180deg, #f9fafb, #f3f4f6);
+      --gradient-indigo: linear-gradient(135deg, #eff6ff, #dbeafe);
+      --gradient-indigo-strong: linear-gradient(135deg, rgba(67,56,202,0.25), rgba(99,102,241,0.15));
+      --gradient-emerald: linear-gradient(135deg, #f0fdf4, #dcfce7);
+      --gradient-amber: linear-gradient(135deg, #fffbeb, #fef3c7);
+      --gradient-rose: linear-gradient(135deg, #fef2f2, #fee2e2);
+      --gradient-purple: linear-gradient(135deg, #faf5ff, #f3e8ff);
+      --gradient-pink: linear-gradient(135deg, #fdf2f8, #fce7f3);
+      --gradient-slate: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      --gradient-orange: linear-gradient(135deg, #fff7ed, #ffedd5);
+      --gradient-summary: linear-gradient(135deg, #faf5ff, #eff6ff);
+      --summary-border: #c4b5fd;
+      --tag-indigo-bg: linear-gradient(135deg, #eff6ff, #dbeafe);
+      --tag-indigo-color: #1d4ed8;
+      --tag-indigo-border: #bfdbfe;
+      --tag-rose-bg: linear-gradient(135deg, #fef2f2, #fee2e2);
+      --tag-rose-color: #dc2626;
+      --tag-rose-border: #fecaca;
+      --tag-emerald-bg: linear-gradient(135deg, #ecfdf5, #d1fae5);
+      --tag-emerald-color: #059669;
+      --tag-emerald-border: #a7f3d0;
+      --tag-purple-bg: linear-gradient(135deg, #faf5ff, #ede9fe);
+      --tag-purple-color: #7c3aed;
+      --tag-purple-border: #c4b5fd;
+      --tag-amber-bg: linear-gradient(135deg, #fffbeb, #fef3c7);
+      --tag-amber-color: #b45309;
+      --tag-amber-border: #fde68a;
+      --prompt-bg: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      --prompt-border: #e5e7eb;
+      --prompt-color: inherit;
+      --clues-bg: #f9fafb;
+      --clues-border: inherit;
+    }
+    html.dark {
+      --body-bg: #090c15;
+      --group-bg: linear-gradient(180deg, #1e293b, #0f172a);
+      --gradient-indigo: linear-gradient(135deg, rgba(67,56,202,0.15), rgba(99,102,241,0.08));
+      --gradient-indigo-strong: linear-gradient(135deg, rgba(67,56,202,0.25), rgba(99,102,241,0.15));
+      --gradient-emerald: linear-gradient(135deg, rgba(6,78,59,0.15), rgba(16,185,129,0.08));
+      --gradient-amber: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(245,158,11,0.08));
+      --gradient-rose: linear-gradient(135deg, rgba(159,18,57,0.2), rgba(239,68,68,0.1));
+      --gradient-purple: linear-gradient(135deg, rgba(91,33,182,0.15), rgba(139,92,246,0.08));
+      --gradient-pink: linear-gradient(135deg, rgba(159,18,57,0.2), rgba(244,63,94,0.1));
+      --gradient-slate: linear-gradient(135deg, rgba(30,41,59,0.6), rgba(15,23,42,0.4));
+      --gradient-orange: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(249,115,22,0.08));
+      --gradient-summary: linear-gradient(135deg, rgba(91,33,182,0.12), rgba(99,102,241,0.08));
+      --summary-border: rgba(139,92,246,0.3);
+      --tag-indigo-bg: rgba(67,56,202,0.25);
+      --tag-indigo-color: #a5b4fc;
+      --tag-indigo-border: rgba(99,102,241,0.3);
+      --tag-rose-bg: rgba(159,18,57,0.2);
+      --tag-rose-color: #fb7185;
+      --tag-rose-border: rgba(252,165,165,0.3);
+      --tag-emerald-bg: rgba(6,78,59,0.2);
+      --tag-emerald-color: #34d399;
+      --tag-emerald-border: rgba(167,243,208,0.3);
+      --tag-purple-bg: rgba(91,33,182,0.2);
+      --tag-purple-color: #a78bfa;
+      --tag-purple-border: rgba(196,181,253,0.3);
+      --tag-amber-bg: rgba(180,83,9,0.2);
+      --tag-amber-color: #fbbf24;
+      --tag-amber-border: rgba(245,158,11,0.3);
+      --prompt-bg: rgba(30,41,59,0.7);
+      --prompt-border: rgba(71,85,105,0.4);
+      --prompt-color: #94a3b8;
+      --clues-bg: rgba(30,41,59,0.6);
+      --clues-border: rgba(71,85,105,0.5);
+    }
 
     /* ── Transitions ── */
     .fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
@@ -125,138 +207,66 @@
       max-height: 0;
     }
 
-    /* ── Dark mode overrides ── */
-    html.dark {
-      color-scheme: dark;
-    }
-    html.dark body {
-      background: #090c15 !important;
-    }
-    html.dark .bg-white\/80,
-    html.dark .bg-white\/60,
-    html.dark .bg-white\/75,
-    html.dark [class*="bg-white"] {
-      background: #111827 !important; /* solid dark surface */
-    }
-    html.dark .bg-white {
-      background: #111827 !important;
-    }
-    html.dark .border-gray-100,
-    html.dark .border-gray-200\/60,
-    html.dark .border-gray-200,
-    html.dark [class*="border-gray-1"],
-    html.dark [class*="border-gray-2"] {
-      border-color: #1f2937 !important;
-    }
-    html.dark .text-gray-800 { color: #f3f4f6 !important; }
-    html.dark .text-gray-700 { color: #e5e7eb !important; }
-    html.dark .text-gray-600 { color: #d1d5db !important; }
-    html.dark .text-gray-500 { color: #9ca3af !important; }
-    html.dark .text-gray-400 { color: #6b7280 !important; }
-    html.dark .text-gray-300 { color: #9ca3af !important; }
-    html.dark .bg-gray-100\/80,
-    html.dark .bg-gray-100 { background: #1f2937 !important; }
-    html.dark .bg-gray-50\/80,
-    html.dark .bg-gray-50 { background: #18212f !important; }
-    html.dark .bg-indigo-50\/60,
-    html.dark .bg-indigo-50 { background: rgba(49, 46, 129, 0.35) !important; }
-    html.dark .border-indigo-100 { border-color: rgba(67, 56, 202, 0.4) !important; }
-    html.dark .bg-amber-50 { background: rgba(180, 83, 9, 0.3) !important; }
-    html.dark .bg-emerald-50 { background: rgba(6, 78, 59, 0.3) !important; }
-    html.dark .bg-purple-50 { background: rgba(91, 33, 182, 0.3) !important; }
-    html.dark .bg-rose-50 { background: rgba(159, 18, 57, 0.3) !important; }
-    html.dark .bg-rose-50\/80 { background: rgba(159, 18, 57, 0.2) !important; }
-    html.dark .border-rose-200 { border-color: rgba(159, 18, 57, 0.4) !important; }
-    html.dark .hover\:bg-indigo-50:hover { background: rgba(67, 56, 202, 0.35) !important; }
-    html.dark .hover\:bg-gray-100:hover { background: #374151 !important; }
-    html.dark .bg-indigo-600 { background: #4f46e5 !important; }
+    /* ── Dark mode (CSS-only: form controls, scrollbar, indeterminate bar) ── */
+    html.dark { color-scheme: dark; }
     html.dark select,
     html.dark input[type="text"],
     html.dark textarea {
-      background: #1f2937 !important;
-      border-color: #374151 !important;
-      color: #f3f4f6 !important;
+      background: #1f2937;
+      border-color: #374151;
+      color: #f3f4f6;
     }
     html.dark select option {
-      background: #111827 !important;
-      color: #f3f4f6 !important;
+      background: #111827;
+      color: #f3f4f6;
       padding: 6px 12px;
-    }
-    html.dark .shadow-\[0_2px_12px_rgba\(0\2c 0\2c 0\2c 0\.04\)\],
-    html.dark [class*="shadow-" ] {
-      box-shadow: 0 4px 16px rgba(0,0,0,0.45) !important;
     }
     html.dark ::-webkit-scrollbar-thumb { background: #4b5563; }
     html.dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
     html.dark .indeterminate-bar::after {
       background: linear-gradient(90deg, transparent, var(--bar-color-dark, rgba(165,180,252,1)), transparent);
     }
-
-    /* Dark mode: header & nav */
-    html.dark header.sticky {
-      background: rgba(9, 12, 21, 0.85) !important;
-      border-bottom-color: #1f2937 !important;
-    }
-    html.dark .flex.bg-gray-100\/80 {
-      background: #1f2937 !important;
-    }
-    html.dark .text-indigo-600 { color: #818cf8 !important; }
-    html.dark .text-indigo-700 { color: #a5b4fc !important; }
-    html.dark .text-emerald-600 { color: #34d399 !important; }
-    html.dark .text-amber-600 { color: #fbbf24 !important; }
-    html.dark .text-rose-600 { color: #fb7185 !important; }
-    html.dark .text-rose-700 { color: #fda4af !important; }
-    html.dark .text-purple-600 { color: #c084fc !important; }
-    html.dark .text-purple-800 { color: #d8b4fe !important; }
-    html.dark .hover\:text-indigo-600:hover { color: #818cf8 !important; }
-    html.dark .hover\:text-gray-700:hover { color: #e5e7eb !important; }
-
-    /* Dark mode: decorative orbs */
-    html.dark .blur-\[120px\],
-    html.dark .blur-\[100px\] {
-      opacity: 0.04 !important;
-    }
   </style>
 </head>
-<body class="min-h-screen relative" :style="{ background: darkMode ? '#090c15' : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%)' }">
+<body class="min-h-screen relative" style="background: var(--body-bg)">
 <!-- Decorative blur orbs -->
-<div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
-<div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
+<div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none dark:opacity-[0.04]" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
+<div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none dark:opacity-[0.04]" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
 
 <div id="app" v-cloak>
   <!-- ── Setup Guide Overlay ── -->
-  <div v-if="needsConfig" class="fixed inset-0 z-[100] flex items-center justify-center" :style="{ background: darkMode ? '#090c15' : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%)' }">
-    <div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
-    <div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
+  <div v-if="needsConfig" class="fixed inset-0 z-[100] flex items-center justify-center" style="background: var(--body-bg)">
+    <div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none dark:opacity-[0.04]" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
+    <div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none dark:opacity-[0.04]" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
     <div class="w-full max-w-md mx-4 relative">
-      <div class="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/60 p-8">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/60 dark:border-gray-800 p-8">
         <div class="flex items-center gap-3 mb-6">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">虎</div>
           <div>
-            <h1 class="text-xl font-bold text-gray-800">虎扑回帖分析</h1>
-            <p class="text-xs text-gray-400">首次使用配置</p>
+            <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100">虎扑回帖分析</h1>
+            <p class="text-xs text-gray-400 dark:text-gray-500">首次使用配置</p>
           </div>
         </div>
-        <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 border border-indigo-100">
-          <p class="text-sm text-indigo-700 font-medium mb-2">如何获取 Cookie：</p>
-          <ol class="text-xs text-indigo-600/80 space-y-1 list-decimal list-inside">
+        <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 dark:bg-[rgba(49,46,129,0.35)] dark:bg-[rgba(49,46,129,0.35)] border border-indigo-100 dark:border-[rgba(67,56,202,0.4)]">
+          <p class="text-sm text-indigo-700 dark:text-indigo-300 font-medium mb-2">如何获取 Cookie：</p>
+          <ol class="text-xs text-indigo-600/80 dark:text-indigo-400/80 space-y-1 list-decimal list-inside">
             <li>打开浏览器访问 <a href="https://bbs.hupu.com" target="_blank" class="underline hover:text-indigo-800">bbs.hupu.com</a> 并登录</li>
             <li>按 F12 打开开发者工具，切换到 Network 标签</li>
             <li>刷新页面，点击任意请求，在 Request Headers 中找到 Cookie</li>
             <li>复制整个 Cookie 值粘贴到下方</li>
           </ol>
-          <p class="text-sm text-indigo-700 font-medium mt-3 mb-1">AI 配置（可选）：</p>
-          <p class="text-xs text-indigo-600/80">用于 AI 分析功能，支持 DeepSeek、Ollama Cloud 或 OpenRouter</p>
+          <p class="text-sm text-indigo-700 dark:text-indigo-300 font-medium mt-3 mb-1">AI 配置（可选）：</p>
+          <p class="text-xs text-indigo-600/80 dark:text-indigo-400/80">用于 AI 分析功能，支持 DeepSeek、Ollama Cloud 或 OpenRouter</p>
         </div>
-        <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
+        <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-[rgba(159,18,57,0.3)] border border-rose-200 dark:border-[rgba(159,18,57,0.4)] text-rose-600 dark:text-rose-400 text-sm">{{ configError }}</div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Hupu Cookie <span class="text-rose-500">*</span></label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">Hupu Cookie <span class="text-rose-500">*</span></label>
           <textarea v-model="configCookie" rows="3" placeholder="粘贴你的虎扑 Cookie..."
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200 resize-none font-mono text-xs"></textarea>
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200 resize-none font-mono text-xs"></textarea>
         </div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">AI 提供商 <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
-          <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">AI 提供商 <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
+          <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
             <option value="deepseek">DeepSeek</option>
             <option value="ollama">Ollama Cloud</option>
             <option value="openrouter">OpenRouter</option>
@@ -264,14 +274,14 @@
           </select>
         </div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} API Key <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">{{ providerLabel }} API Key <span class="text-gray-400 text-xs font-normal">(可选)</span></label>
           <input v-model="configAiKey" type="text" :placeholder="providerKeyPlaceholder"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} 模型名</label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">{{ providerLabel }} 模型名</label>
           <input v-model="configModel" type="text" :placeholder="providerModelPlaceholder"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig" :disabled="configSaving || !configCookie.trim()"
           class="w-full py-2.5 rounded-xl text-white font-medium text-sm transition-all duration-200 shadow-sm"
@@ -284,26 +294,26 @@
   </div>
 
   <!-- ── AI Key Setup Overlay (cookie already configured) ── -->
-  <div v-if="!needsConfig && needsAiKey" class="fixed inset-0 z-[100] flex items-center justify-center" :style="{ background: darkMode ? '#090c15' : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #eff6ff 60%, #f5f3ff 100%)' }">
-    <div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
-    <div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
+  <div v-if="!needsConfig && needsAiKey" class="fixed inset-0 z-[100] flex items-center justify-center" style="background: var(--body-bg)">
+    <div class="fixed top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none dark:opacity-[0.04]" style="background: radial-gradient(circle, #818cf8, transparent); transform: translate(30%, -20%);"></div>
+    <div class="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 pointer-events-none dark:opacity-[0.04]" style="background: radial-gradient(circle, #6366f1, transparent); transform: translate(-20%, 20%);"></div>
     <div class="w-full max-w-md mx-4 relative">
-      <div class="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/60 p-8">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/60 dark:border-gray-800 p-8">
         <div class="flex items-center gap-3 mb-6">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">AI</div>
           <div>
-            <h1 class="text-xl font-bold text-gray-800">完善 AI 配置</h1>
-            <p class="text-xs text-gray-400">Cookie 已配置，补充 AI API Key</p>
+            <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100">完善 AI 配置</h1>
+            <p class="text-xs text-gray-400 dark:text-gray-500">Cookie 已配置，补充 AI API Key</p>
           </div>
         </div>
-        <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 border border-indigo-100">
-          <p class="text-sm text-indigo-700 font-medium mb-2">AI 提供商配置</p>
-          <p class="text-xs text-indigo-600/80">用于 AI 智能分析功能（用户画像、发帖分析等），支持 DeepSeek、Ollama Cloud、OpenRouter 和 OpenCode。不填写则 AI 分析功能不可用。</p>
+        <div class="mb-6 p-4 rounded-xl bg-indigo-50/60 dark:bg-[rgba(49,46,129,0.35)] dark:bg-[rgba(49,46,129,0.35)] border border-indigo-100 dark:border-[rgba(67,56,202,0.4)]">
+          <p class="text-sm text-indigo-700 dark:text-indigo-300 font-medium mb-2">AI 提供商配置</p>
+          <p class="text-xs text-indigo-600/80 dark:text-indigo-400/80">用于 AI 智能分析功能（用户画像、发帖分析等），支持 DeepSeek、Ollama Cloud、OpenRouter 和 OpenCode。不填写则 AI 分析功能不可用。</p>
         </div>
-        <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ configError }}</div>
+        <div v-if="configError" class="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-[rgba(159,18,57,0.3)] border border-rose-200 dark:border-[rgba(159,18,57,0.4)] text-rose-600 dark:text-rose-400 text-sm">{{ configError }}</div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">AI 提供商</label>
-          <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">AI 提供商</label>
+          <select v-model="configProvider" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
             <option value="deepseek">DeepSeek</option>
             <option value="ollama">Ollama Cloud</option>
             <option value="openrouter">OpenRouter</option>
@@ -311,14 +321,14 @@
           </select>
         </div>
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} API Key</label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">{{ providerLabel }} API Key</label>
           <input v-model="configAiKey" type="text" :placeholder="providerKeyPlaceholder"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ providerLabel }} 模型名</label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">{{ providerLabel }} 模型名</label>
           <input v-model="configModel" type="text" :placeholder="providerModelPlaceholder"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
         </div>
         <button @click="saveConfig"
           class="w-full py-2.5 rounded-xl text-white font-medium text-sm transition-all duration-200 shadow-sm bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 hover:shadow-md active:scale-[0.98]">
@@ -326,7 +336,7 @@
           <span v-else>保存配置</span>
         </button>
         <button @click="skipAiKeySetup"
-          class="w-full mt-3 py-2.5 rounded-xl text-gray-500 font-medium text-sm transition-all duration-200 hover:text-gray-700 hover:bg-gray-100">
+          class="w-full mt-3 py-2.5 rounded-xl text-gray-500 dark:text-gray-400 font-medium text-sm transition-all duration-200 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
           跳过，稍后设置
         </button>
       </div>
@@ -334,32 +344,32 @@
   </div>
 
   <!-- ── Header ── -->
-  <header class="sticky top-0 z-50 bg-white/75 backdrop-blur-xl border-b border-gray-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+  <header class="sticky top-0 z-50 bg-white/75 dark:bg-dark-surface backdrop-blur-xl border-b border-gray-200/60 dark:border-gray-800 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
       <!-- Logo / Title -->
       <div class="flex items-center gap-2.5 shrink-0">
         <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">虎</div>
-        <h1 class="text-lg font-bold text-gray-800 tracking-tight">虎扑回帖分析</h1>
-        <button @click="toggleDarkMode" class="ml-1 w-8 h-8 rounded-lg flex items-center justify-center border border-gray-200 bg-white/60 hover:bg-gray-100 transition-all duration-200 text-gray-500 hover:text-gray-700" :title="darkMode ? '切换亮色模式' : '切换暗黑模式'">
+        <h1 class="text-lg font-bold text-gray-800 dark:text-gray-100 tracking-tight">虎扑回帖分析</h1>
+        <button @click="toggleDarkMode" class="ml-1 w-8 h-8 rounded-lg flex items-center justify-center border border-gray-200 bg-white/60 dark:bg-dark-surface hover:bg-gray-100 transition-all duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" :title="darkMode ? '切换亮色模式' : '切换暗黑模式'">
           <svg v-if="darkMode" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
           <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 5.354A9 9 0 018.646 17.646 9 9 0 0020.354 5.354z"/></svg>
         </button>
       </div>
 
       <!-- Tab switch -->
-      <div class="flex bg-gray-100/80 rounded-xl p-0.5">
+      <div class="flex bg-gray-100 dark:bg-dark-elevated rounded-xl p-0.5">
         <button @click="activeTab='replies'"
-          :class="activeTab==='replies' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-indigo-600' : 'text-gray-500 hover:text-gray-700'"
+          :class="activeTab==='replies' ? 'bg-white dark:bg-dark-surface shadow-[0_1px_3px_rgba(0,0,0,0.1)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
           class="px-3.5 py-1.5 text-sm rounded-lg transition-all duration-200 font-medium">
           回帖分析
         </button>
         <button @click="activeTab='posts'"
-          :class="activeTab==='posts' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-indigo-600' : 'text-gray-500 hover:text-gray-700'"
+          :class="activeTab==='posts' ? 'bg-white dark:bg-dark-surface shadow-[0_1px_3px_rgba(0,0,0,0.1)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
           class="px-3.5 py-1.5 text-sm rounded-lg transition-all duration-200 font-medium">
           发帖数据
         </button>
         <button @click="activeTab='qa'"
-          :class="activeTab==='qa' ? 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+          :class="activeTab==='qa' ? 'bg-white dark:bg-dark-surface shadow-[0_1px_3px_rgba(0,0,0,0.1)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
           class="px-3.5 py-1.5 text-sm rounded-lg transition-all duration-200 font-medium">
           AI 问答
         </button>
@@ -368,19 +378,19 @@
       <!-- Search & actions -->
       <div class="flex items-center gap-2 flex-1 min-w-[320px]">
         <div class="relative flex-1">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
           <input v-model="euid" @focus="onEuidFocus" @blur="onEuidBlur" @keyup.enter="activeTab==='replies' ? analyze() : loadPosts()" placeholder="输入用户 euid"
             autocomplete="off"
-            class="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
-          <div v-if="showEuidDropdown && filteredEuids.length" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
+            class="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none transition-all duration-200">
+          <div v-if="showEuidDropdown && filteredEuids.length" class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">
             <div v-for="item in filteredEuids" :key="item.euid"
               @mousedown.prevent="selectEuid(item.euid)"
               :title="item.username"
-              class="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer flex items-center justify-between border-b border-gray-50 last:border-0 transition-colors">
-              <span class="font-mono text-gray-700 text-xs">{{ item.euid }}</span>
-              <span class="text-xs text-gray-400 ml-2 truncate max-w-[140px]">{{ item.username }}</span>
+              class="px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-[rgba(67,56,202,0.35)] cursor-pointer flex items-center justify-between border-b border-gray-50 dark:border-gray-700 last:border-0 transition-colors">
+              <span class="font-mono text-gray-700 dark:text-gray-200 text-xs">{{ item.euid }}</span>
+              <span class="text-xs text-gray-400 dark:text-gray-500 ml-2 truncate max-w-[140px]">{{ item.username }}</span>
             </div>
           </div>
         </div>
@@ -403,7 +413,7 @@
         </button>
 
         <!--<button v-if="(activeTab==='replies' && (stats || aiResult)) || (activeTab==='posts' && postsData.length)" @click="exportImage"
-          class="px-3 py-2 rounded-xl text-sm font-medium border-2 border-emerald-300 text-emerald-700 bg-white/60 hover:bg-emerald-50 hover:border-emerald-400 shadow-sm hover:shadow-md transition-all duration-200 flex items-center gap-1.5 active:scale-95">
+          class="px-3 py-2 rounded-xl text-sm font-medium border-2 border-emerald-300 text-emerald-700 bg-white/60 dark:bg-dark-surface hover:bg-emerald-50 hover:border-emerald-400 shadow-sm hover:shadow-md transition-all duration-200 flex items-center gap-1.5 active:scale-95">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/>
           </svg>
@@ -413,30 +423,30 @@
 
       <!-- Threshold slider -->
       <div v-if="activeTab==='replies'" class="flex items-center gap-2 text-sm">
-        <span class="text-xs text-gray-500 font-medium">相似度阈值</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400 font-medium">相似度阈值</span>
         <input type="range" v-model.number="threshold" min="0.2" max="0.9" step="0.05"
           class="w-20 accent-indigo-500">
-        <span class="font-mono text-xs font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md w-10 text-center">{{ threshold.toFixed(2) }}</span>
+        <span class="font-mono text-xs font-semibold text-indigo-600 dark:text-indigo-400 dark:text-indigo-400bg-indigo-50 dark:bg-[rgba(49,46,129,0.35)] px-1.5 py-0.5 rounded-md w-10 text-center">{{ threshold.toFixed(2) }}</span>
       </div>
     </div>
   </header>
 
   <!-- ── Data Fetch Section ── -->
-  <div class="bg-white/60 backdrop-blur-sm border-b border-gray-200/60 py-2.5">
+  <div class="bg-white/60 dark:bg-dark-surface backdrop-blur-sm border-b border-gray-200/60 dark:border-gray-800 py-2.5">
     <div class="max-w-6xl mx-auto px-4 flex items-center gap-3 flex-wrap">
-      <span class="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+      <span class="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
         <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> 获取数据
       </span>
       <div class="flex items-center gap-1.5">
-        <label class="text-xs text-gray-500">回帖:</label>
-        <select v-model="fetchRepliesCount" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white/80 focus:ring-2 focus:ring-amber-400/30 outline-none text-gray-500">
+        <label class="text-xs text-gray-500 dark:text-gray-400">回帖:</label>
+        <select v-model="fetchRepliesCount" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white/80 dark:bg-dark-surface focus:ring-2 focus:ring-amber-400/30 outline-none text-gray-500 dark:text-gray-400">
           <option :value="0">全部</option>
           <option v-for="n in [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 10000]" :key="n" :value="n">{{ n }} 条</option>
         </select>
       </div>
       <div class="flex items-center gap-1.5">
-        <label class="text-xs text-gray-500">发帖:</label>
-        <select v-model="fetchPostsPages" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white/80 focus:ring-2 focus:ring-amber-400/30 outline-none text-gray-500">
+        <label class="text-xs text-gray-500 dark:text-gray-400">发帖:</label>
+        <select v-model="fetchPostsPages" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white/80 dark:bg-dark-surface focus:ring-2 focus:ring-amber-400/30 outline-none text-gray-500 dark:text-gray-400">
           <option :value="0">全部</option>
           <option v-for="n in 30" :key="n" :value="n">{{ n }} 页</option>
         </select>
@@ -446,7 +456,7 @@
         style="background: linear-gradient(135deg, #f97316, #ea580c);">
         {{ fetchLoading ? '获取中...' : '开始获取' }}
       </button>
-      <span v-if="fetchResult" class="text-sm font-medium" :class="fetchResult.success ? 'text-emerald-600' : 'text-rose-600'">
+      <span v-if="fetchResult" class="text-sm font-medium" :class="fetchResult.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">
         {{ fetchResult.message }}
       </span>
     </div>
@@ -454,7 +464,7 @@
 
   <!-- ── Error ── -->
   <div v-if="error" class="max-w-6xl mx-auto px-4 mt-4">
-    <div class="bg-rose-50/80 backdrop-blur-sm border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl text-sm flex items-center gap-2 shadow-sm">
+    <div class="bg-rose-50/80 dark:bg-[rgba(159,18,57,0.2)] dark:bg-[rgba(159,18,57,0.2)] backdrop-blur-sm border border-rose-200 dark:border-[rgba(159,18,57,0.4)] text-rose-700 dark:text-rose-300 px-4 py-3 rounded-2xl text-sm flex items-center gap-2 shadow-sm">
       <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
       </svg>
@@ -464,14 +474,14 @@
 
   <!-- ── Progress: Similarity Analysis ── -->
   <div v-if="similarityLoading" class="max-w-6xl mx-auto px-4 mt-6">
-    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
+    <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800">
       <div class="flex items-center justify-between mb-2.5">
-        <span class="text-sm font-medium text-gray-700">{{ progressPhase || '准备中' }}</span>
-        <span v-if="progressCurrent > 0" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ progressPhase || '准备中' }}</span>
+        <span v-if="progressCurrent > 0" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 dark:text-indigo-400bg-indigo-50 dark:bg-[rgba(49,46,129,0.35)] px-2 py-0.5 rounded-full">
           {{ progressCurrent.toLocaleString() }}{{ progressTotal > 0 ? ' / ' + progressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
-      <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+      <div class="w-full bg-gray-100 dark:bg-dark-elevated rounded-full h-2 overflow-hidden">
         <div v-if="progressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #6366f1, #8b5cf6);"
           :style="{ width: (progressCurrent / progressTotal * 100) + '%' }"></div>
@@ -482,14 +492,14 @@
 
   <!-- ── Progress: Fetch Posts ── -->
   <div v-if="fetchPostsLoading" class="max-w-6xl mx-auto px-4 mt-4">
-    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
+    <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800">
       <div class="flex items-center justify-between mb-2.5">
-        <span class="text-sm font-medium text-gray-700">{{ fetchPostsProgressPhase || '获取发帖准备中' }}</span>
-        <span v-if="fetchPostsProgressCurrent > 0" class="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ fetchPostsProgressPhase || '获取发帖准备中' }}</span>
+        <span v-if="fetchPostsProgressCurrent > 0" class="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-[rgba(180,83,9,0.3)] px-2 py-0.5 rounded-full">
           {{ fetchPostsProgressCurrent.toLocaleString() }}{{ fetchPostsProgressTotal > 0 ? ' / ' + fetchPostsProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
-      <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+      <div class="w-full bg-gray-100 dark:bg-dark-elevated rounded-full h-2 overflow-hidden">
         <div v-if="fetchPostsProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #f97316, #fb923c);"
           :style="{ width: (fetchPostsProgressCurrent / fetchPostsProgressTotal * 100) + '%' }"></div>
@@ -500,14 +510,14 @@
 
   <!-- ── Progress: Fetch Replies ── -->
   <div v-if="fetchRepliesLoading" class="max-w-6xl mx-auto px-4 mt-4">
-    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
+    <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800">
       <div class="flex items-center justify-between mb-2.5">
-        <span class="text-sm font-medium text-gray-700">{{ fetchRepliesProgressPhase || '获取回帖准备中' }}</span>
-        <span v-if="fetchRepliesProgressCurrent > 0" class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ fetchRepliesProgressPhase || '获取回帖准备中' }}</span>
+        <span v-if="fetchRepliesProgressCurrent > 0" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-[rgba(6,78,59,0.3)] px-2 py-0.5 rounded-full">
           {{ fetchRepliesProgressCurrent.toLocaleString() }}{{ fetchRepliesProgressTotal > 0 ? ' / ' + fetchRepliesProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
-      <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+      <div class="w-full bg-gray-100 dark:bg-dark-elevated rounded-full h-2 overflow-hidden">
         <div v-if="fetchRepliesProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #10b981, #34d399);"
           :style="{ width: (fetchRepliesProgressCurrent / fetchRepliesProgressTotal * 100) + '%' }"></div>
@@ -518,14 +528,14 @@
 
   <!-- ── Progress: AI Post Analysis ── -->
   <div v-if="aiPostLoading" class="max-w-6xl mx-auto px-4 mt-4">
-    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
+    <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800">
       <div class="flex items-center justify-between mb-2.5">
-        <span class="text-sm font-medium text-gray-700">{{ aiPostProgressPhase || 'AI发帖分析准备中' }}</span>
-        <span v-if="aiPostProgressCurrent > 0" class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ aiPostProgressPhase || 'AI发帖分析准备中' }}</span>
+        <span v-if="aiPostProgressCurrent > 0" class="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-[rgba(91,33,182,0.3)] px-2 py-0.5 rounded-full">
           {{ aiPostProgressCurrent.toLocaleString() }}{{ aiPostProgressTotal > 0 ? ' / ' + aiPostProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
-      <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+      <div class="w-full bg-gray-100 dark:bg-dark-elevated rounded-full h-2 overflow-hidden">
         <div v-if="aiPostProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #8b5cf6, #a78bfa);"
           :style="{ width: (aiPostProgressCurrent / aiPostProgressTotal * 100) + '%' }"></div>
@@ -536,14 +546,14 @@
 
   <!-- ── Progress: AI Replies Analysis ── -->
   <div v-if="aiLoading" class="max-w-6xl mx-auto px-4 mt-4">
-    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100">
+    <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800">
       <div class="flex items-center justify-between mb-2.5">
-        <span class="text-sm font-medium text-gray-700">{{ aiProgressPhase || 'AI分析准备中' }}</span>
-        <span v-if="aiProgressCurrent > 0" class="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ aiProgressPhase || 'AI分析准备中' }}</span>
+        <span v-if="aiProgressCurrent > 0" class="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-[rgba(91,33,182,0.3)] px-2 py-0.5 rounded-full">
           {{ aiProgressCurrent.toLocaleString() }}{{ aiProgressTotal > 0 ? ' / ' + aiProgressTotal.toLocaleString() : ' 条' }}
         </span>
       </div>
-      <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+      <div class="w-full bg-gray-100 dark:bg-dark-elevated rounded-full h-2 overflow-hidden">
         <div v-if="aiProgressTotal > 0" class="h-2 rounded-full transition-all duration-500 ease-out"
           style="background: linear-gradient(90deg, #8b5cf6, #a78bfa);"
           :style="{ width: (aiProgressCurrent / aiProgressTotal * 100) + '%' }"></div>
@@ -554,9 +564,9 @@
 
   <!-- ── Loading: Posts ── -->
   <div v-if="postLoading" class="max-w-6xl mx-auto px-4 mt-6">
-    <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-8 border border-gray-100 text-center">
+    <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-8 border border-gray-100 dark:border-gray-800 text-center">
       <div class="w-10 h-10 mx-auto mb-3 rounded-full border-[3px] border-gray-200 border-t-indigo-500 animate-spin"></div>
-      <p class="text-sm text-gray-500 font-medium">加载发帖数据中...</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">加载发帖数据中...</p>
     </div>
   </div>
 
@@ -564,14 +574,14 @@
   <div v-if="activeTab === 'posts'" class="pt-4">
     <!-- User info -->
     <div v-if="userInfo" class="max-w-6xl mx-auto px-4 mt-6 animate-card">
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 flex items-center gap-3">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
           {{ userInfo.username.charAt(0) }}
         </div>
         <div>
-          <span class="font-semibold text-gray-800">{{ userInfo.username }}</span>
+          <span class="font-semibold text-gray-800 dark:text-gray-100">{{ userInfo.username }}</span>
           <span class="text-gray-400 text-sm ml-2 font-mono">{{ userInfo.euid }}</span>
-          <span class="text-gray-300 text-sm ml-2">— 发帖分析</span>
+          <span class="text-gray-300 dark:text-gray-400text-sm ml-2">— 发帖分析</span>
         </div>
       </div>
     </div>
@@ -579,33 +589,33 @@
     <!-- Stats Summary -->
     <div v-if="postsData.length" class="max-w-6xl mx-auto px-4 mt-6">
       <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div class="stat-card accent-blue bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-gray-800">{{ postsData.length }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">总发帖数</div>
+        <div class="stat-card accent-blue bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-gray-800 dark:text-gray-100">{{ postsData.length }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">总发帖数</div>
         </div>
-        <div class="stat-card accent-emerald bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-indigo-600">{{ totalReplies }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">总回复</div>
+        <div class="stat-card accent-emerald bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-indigo-400 dark:text-indigo-400">{{ totalReplies }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">总回复</div>
         </div>
-        <div class="stat-card accent-emerald bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-emerald-600">{{ totalVisits }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">总浏览</div>
+        <div class="stat-card accent-emerald bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ totalVisits }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">总浏览</div>
         </div>
-        <div class="stat-card accent-amber bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-amber-600">{{ totalLights }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">总点亮</div>
+        <div class="stat-card accent-amber bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-amber-600 dark:text-amber-400">{{ totalLights }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">总点亮</div>
         </div>
-        <div class="stat-card accent-violet bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-purple-600">{{ videoCount }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">视频帖</div>
+        <div class="stat-card accent-violet bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-purple-600 dark:text-purple-400">{{ videoCount }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">视频帖</div>
         </div>
       </div>
     </div>
 
     <!-- Topic distribution -->
     <div v-if="postsData.length" class="max-w-6xl mx-auto px-4 mt-6 animate-card">
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100">
-        <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot indigo"></span> 发帖板块分布
         </h3>
         <div class="max-w-md mx-auto">
@@ -616,110 +626,109 @@
 
     <!-- Post AI Analysis -->
     <div v-if="aiPostResult" class="max-w-6xl mx-auto px-4 mt-6">
-      <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
+      <h2 class="text-base font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center">
         <span class="section-dot purple"></span> 发帖 AI 智能分析
-        <span class="text-xs font-normal text-gray-400 ml-2">AI 分析</span>
+        <span class="text-xs font-normal text-gray-400 dark:text-gray-500 ml-2">AI 分析</span>
       </h2>
 
       <!-- User Portrait -->
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 mb-4 p-5 stat-card accent-violet animate-card">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 mb-4 p-5 stat-card accent-violet animate-card">
         <div class="flex items-center gap-3 mb-4">
           <span class="text-xs font-bold px-3 py-1.5 rounded-full text-white shadow-sm" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">用户画像</span>
-          <span class="text-lg font-bold text-gray-800">{{ aiPostResult.user_portrait.overall_impression }}</span>
+          <span class="text-lg font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.user_portrait.overall_impression }}</span>
         </div>
         <div class="mb-3 pl-0.5">
-          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">关注领域</h3>
+          <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2.5">关注领域</h3>
           <div class="flex flex-wrap gap-2">
             <span v-for="interest in aiPostResult.user_portrait.main_interests" :key="interest"
               class="text-sm px-3.5 py-1.5 rounded-full font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-              :style="darkMode ? 'background: linear-gradient(135deg, rgba(67,56,202,0.25), rgba(99,102,241,0.15)); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3);' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #1d4ed8; border: 1px solid #bfdbfe;'">
+              style="background: var(--tag-indigo-bg); color: var(--tag-indigo-color); border: 1px solid var(--tag-indigo-border)">
               {{ interest }}
             </span>
           </div>
         </div>
         <div class="pl-0.5">
-          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">创作风格</h3>
-          <p class="text-sm text-gray-700 leading-relaxed bg-gray-50/80 rounded-xl p-4 border border-gray-100">{{ aiPostResult.user_portrait.content_style }}</p>
+          <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2.5">创作风格</h3>
+          <p class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed bg-gray-50 dark:bg-dark-subtle rounded-xl p-4 border border-gray-100 dark:border-gray-800">{{ aiPostResult.user_portrait.content_style }}</p>
         </div>
       </div>
 
       <!-- Content Analysis -->
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 mb-4 p-5 animate-card">
-        <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 mb-4 p-5 animate-card">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot indigo"></span> 内容分析
         </h3>
         <div class="mb-3">
-          <span class="text-xs font-medium text-gray-500">主要话题</span>
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">主要话题</span>
           <div class="flex flex-wrap gap-2 mt-1.5">
             <span v-for="topic in aiPostResult.post_analysis.topic_focus" :key="topic"
               class="text-sm px-3.5 py-1.5 rounded-full font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-              style="background: linear-gradient(135deg, #fffbeb, #fef3c7); color: #b45309; border: 1px solid #fde68a;"
-              :style="darkMode ? 'background: linear-gradient(135deg, rgba(180,83,9,0.2), rgba(245,158,11,0.1)); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3);' : 'background: linear-gradient(135deg, #fffbeb, #fef3c7); color: #b45309; border: 1px solid #fde68a;'">
+              style="background: var(--tag-amber-bg); color: var(--tag-amber-color); border: 1px solid var(--tag-amber-border)">
               {{ topic }}
             </span>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <div class="rounded-xl p-4 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(30,41,59,0.6), rgba(15,23,42,0.4));' : 'background: linear-gradient(135deg, #f8fafc, #f1f5f9);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">纯文字帖</div>
-            <div class="text-base font-bold text-gray-800">{{ aiPostResult.post_analysis.content_types.text_only }}</div>
+          <div class="rounded-xl p-4 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-slate)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">纯文字帖</div>
+            <div class="text-base font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.post_analysis.content_types.text_only }}</div>
           </div>
-          <div class="rounded-xl p-4 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(6,78,59,0.2), rgba(16,185,129,0.1));' : 'background: linear-gradient(135deg, #f0fdf4, #dcfce7);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">图文帖</div>
-            <div class="text-base font-bold text-gray-800">{{ aiPostResult.post_analysis.content_types.image_posts }}</div>
+          <div class="rounded-xl p-4 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-emerald)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">图文帖</div>
+            <div class="text-base font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.post_analysis.content_types.image_posts }}</div>
           </div>
-          <div class="rounded-xl p-4 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(159,18,57,0.2), rgba(239,68,68,0.1));' : 'background: linear-gradient(135deg, #fef2f2, #fee2e2);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">视频帖</div>
-            <div class="text-base font-bold text-gray-800">{{ aiPostResult.post_analysis.content_types.video_posts }}</div>
+          <div class="rounded-xl p-4 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-rose)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">视频帖</div>
+            <div class="text-base font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.post_analysis.content_types.video_posts }}</div>
           </div>
         </div>
         <div>
-          <span class="text-xs font-medium text-gray-500">质量评估</span>
-          <p class="text-sm text-gray-700 mt-1.5 leading-relaxed">{{ aiPostResult.post_analysis.quality_assessment }}</p>
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">质量评估</span>
+          <p class="text-sm text-gray-700 dark:text-gray-200 mt-1.5 leading-relaxed">{{ aiPostResult.post_analysis.quality_assessment }}</p>
         </div>
       </div>
 
       <!-- Engagement -->
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 mb-4 p-5 animate-card">
-        <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 mb-4 p-5 animate-card">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot emerald"></span> 互动分析
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div class="rounded-xl p-4 border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(67,56,202,0.15), rgba(99,102,241,0.08));' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">平均互动</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiPostResult.engagement_analysis.average_replies }}</div>
+          <div class="rounded-xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-indigo)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">平均互动</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.engagement_analysis.average_replies }}</div>
           </div>
-          <div class="rounded-xl p-4 border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(6,78,59,0.15), rgba(16,185,129,0.08));' : 'background: linear-gradient(135deg, #f0fdf4, #dcfce7);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">受众反馈</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiPostResult.engagement_analysis.audience_response }}</div>
+          <div class="rounded-xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-emerald)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">受众反馈</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.engagement_analysis.audience_response }}</div>
           </div>
-          <div class="rounded-xl p-4 border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(245,158,11,0.08));' : 'background: linear-gradient(135deg, #fffbeb, #fef3c7);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">最受欢迎</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiPostResult.engagement_analysis.most_engaging_content }}</div>
+          <div class="rounded-xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-amber)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">最受欢迎</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiPostResult.engagement_analysis.most_engaging_content }}</div>
           </div>
         </div>
       </div>
 
       <!-- Viewpoints -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-5 animate-card">
-          <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-5 animate-card">
+          <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 flex items-center">
             <span class="section-dot purple"></span> 核心观点
           </h3>
           <ul class="space-y-2.5">
             <li v-for="vp in aiPostResult.viewpoint_summary.core_viewpoints" :key="vp"
-              class="text-sm text-gray-700 flex items-start gap-2.5 leading-relaxed">
+              class="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2.5 leading-relaxed">
               <span class="w-1.5 h-1.5 rounded-full bg-purple-400 mt-1.5 shrink-0"></span> {{ vp }}
             </li>
           </ul>
         </div>
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-5 animate-card">
-          <h3 class="text-sm font-bold text-gray-700 mb-3 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-5 animate-card">
+          <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3 flex items-center">
             <span class="section-dot amber"></span> 独特视角
           </h3>
           <ul class="space-y-2.5">
             <li v-for="up in aiPostResult.viewpoint_summary.unique_perspectives" :key="up"
-              class="text-sm text-gray-700 flex items-start gap-2.5 leading-relaxed">
+              class="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2.5 leading-relaxed">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0"></span> {{ up }}
             </li>
           </ul>
@@ -727,32 +736,32 @@
       </div>
 
       <!-- Summary -->
-      <div v-if="aiPostResult.summary" class="rounded-2xl border p-5 animate-card" :style="darkMode ? 'background: linear-gradient(135deg, rgba(91,33,182,0.12), rgba(99,102,241,0.08)); border-color: rgba(139,92,246,0.3);' : 'background: linear-gradient(135deg, #faf5ff, #eff6ff); border-color: #c4b5fd;'">
-        <h3 class="text-sm font-bold text-purple-800 mb-2 flex items-center">
+      <div v-if="aiPostResult.summary" class="rounded-2xl border p-5 animate-card" style="background: var(--gradient-summary); border-color: var(--summary-border)">
+        <h3 class="text-sm font-bold text-purple-800 dark:text-purple-300 mb-2 flex items-center">
           <span class="section-dot purple"></span> 综合评语
         </h3>
-        <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ aiPostResult.summary }}</p>
+        <p class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-line">{{ aiPostResult.summary }}</p>
       </div>
     </div>
 
     <!-- Post List -->
     <div v-if="postsData.length" class="max-w-6xl mx-auto px-4 mt-6 pb-12">
-      <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
+      <h2 class="text-base font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center">
         <span class="section-dot blue"></span> 发帖列表
       </h2>
       <div class="space-y-3">
         <div v-for="post in sortedPosts" :key="post.tid"
-          class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
           <div class="flex items-start justify-between gap-4">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full shadow-sm" :style="darkMode ? 'background: rgba(67,56,202,0.25); color: #a5b4fc;' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #1d4ed8;'">{{ post.topic_name || post.forum_name }}</span>
-                <span v-if="post.has_video" class="text-xs font-semibold px-2.5 py-0.5 rounded-full" :style="darkMode ? 'background: rgba(159,18,57,0.2); color: #fb7185;' : 'background: #fef2f2; color: #dc2626;'">视频</span>
-                <span v-if="post.total_pics > 0" class="text-xs font-semibold px-2.5 py-0.5 rounded-full" :style="darkMode ? 'background: rgba(6,78,59,0.2); color: #34d399;' : 'background: #ecfdf5; color: #059669;'">{{ post.total_pics }}图</span>
+                <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full shadow-sm" style="background: var(--tag-indigo-bg); color: var(--tag-indigo-color)">{{ post.topic_name || post.forum_name }}</span>
+                <span v-if="post.has_video" class="text-xs font-semibold px-2.5 py-0.5 rounded-full" style="background: var(--tag-rose-bg); color: var(--tag-rose-color)">视频</span>
+                <span v-if="post.total_pics > 0" class="text-xs font-semibold px-2.5 py-0.5 rounded-full" style="background: var(--tag-emerald-bg); color: var(--tag-emerald-color)">{{ post.total_pics }}图</span>
               </div>
-              <a :href="post.url" target="_blank" class="text-base font-semibold text-gray-800 hover:text-indigo-600 line-clamp-2 transition-colors">{{ post.title }}</a>
-              <p v-if="post.summary" class="text-sm text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">{{ post.summary }}</p>
-              <div class="flex items-center gap-5 mt-2.5 text-xs text-gray-400 font-medium">
+              <a :href="post.url" target="_blank" class="text-base font-semibold text-gray-800 dark:text-gray-100 hover:text-indigo-600 dark:hover:text-indigo-400 line-clamp-2 transition-colors">{{ post.title }}</a>
+              <p v-if="post.summary" class="text-sm text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2 leading-relaxed">{{ post.summary }}</p>
+              <div class="flex items-center gap-5 mt-2.5 text-xs text-gray-400 dark:text-gray-500 font-medium">
                 <span class="flex items-center gap-1">&#128197; {{ post.format_time }}</span>
                 <span class="flex items-center gap-1">&#128172; {{ post.replies }}</span>
                 <span class="flex items-center gap-1">&#128293; {{ post.lights }}</span>
@@ -770,12 +779,12 @@
   <div v-if="activeTab === 'replies'" id="capture-area" class="pt-4">
     <!-- User info -->
     <div v-if="userInfo" class="max-w-6xl mx-auto px-4 mt-6 animate-card">
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 flex items-center gap-3">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
           {{ userInfo.username.charAt(0) }}
         </div>
         <div>
-          <span class="font-semibold text-gray-800">{{ userInfo.username }}</span>
+          <span class="font-semibold text-gray-800 dark:text-gray-100">{{ userInfo.username }}</span>
           <span class="text-gray-400 text-sm ml-2 font-mono">{{ userInfo.euid }}</span>
         </div>
       </div>
@@ -784,24 +793,24 @@
     <!-- Stats Cards -->
     <div v-if="stats" class="max-w-6xl mx-auto px-4 mt-6">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="stat-card accent-blue bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-gray-800">{{ stats.total_replies }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">总回帖数</div>
+        <div class="stat-card accent-blue bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-gray-800 dark:text-gray-100">{{ stats.total_replies }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">总回帖数</div>
         </div>
-        <div class="stat-card accent-emerald bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-emerald-600">{{ stats.similarity_available ? stats.unique_replies : '-' }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">独立回帖</div>
+        <div class="stat-card accent-emerald bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ stats.similarity_available ? stats.unique_replies : '-' }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">独立回帖</div>
         </div>
-        <div class="stat-card accent-amber bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-          <div class="text-2xl font-extrabold text-amber-600">{{ stats.similarity_available ? stats.repeated_replies : '-' }}</div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">重复/相似</div>
+        <div class="stat-card accent-amber bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
+          <div class="text-2xl font-extrabold text-amber-600 dark:text-amber-400">{{ stats.similarity_available ? stats.repeated_replies : '-' }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">重复/相似</div>
         </div>
-        <div class="stat-card bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card"
+        <div class="stat-card bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card"
           :class="stats.similarity_available ? (stats.repeat_rate > 0.3 ? 'accent-rose' : 'accent-violet') : ''">
-          <div class="text-2xl font-extrabold" :class="stats.similarity_available ? (stats.repeat_rate > 0.3 ? 'text-rose-600' : 'text-indigo-600') : 'text-gray-400'">
+          <div class="text-2xl font-extrabold" :class="stats.similarity_available ? (stats.repeat_rate > 0.3 ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400') : 'text-gray-400 dark:text-gray-500'">
             {{ stats.similarity_available ? (stats.repeat_rate * 100).toFixed(1) + '%' : '-' }}
           </div>
-          <div class="text-xs text-gray-500 mt-1.5 font-medium">重复率</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">重复率</div>
         </div>
       </div>
       <div class="mt-4 text-center">
@@ -816,14 +825,14 @@
     <!-- Charts -->
     <div v-if="stats" class="max-w-6xl mx-auto px-4 mt-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot indigo"></span> 板块分布
           </h3>
           <canvas id="topicChart" height="200"></canvas>
         </div>
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot blue"></span> 月度发帖趋势
           </h3>
           <canvas id="timeChart" height="200"></canvas>
@@ -833,8 +842,8 @@
 
     <!-- Word Cloud -->
     <div v-if="wordCloudWords.length" class="max-w-6xl mx-auto px-4 mt-6 animate-card">
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100">
-        <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot purple"></span> 词云 (高频词)
         </h3>
         <canvas id="wordCloudCanvas" height="350" class="w-full cursor-pointer rounded-xl"></canvas>
@@ -843,19 +852,19 @@
 
     <!-- Detailed Analysis -->
     <div v-if="detailedAnalysis" class="max-w-6xl mx-auto px-4 mt-6">
-      <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
+      <h2 class="text-base font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center">
         <span class="section-dot indigo"></span> 深度分析
       </h2>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-xs font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot amber"></span> 时段活跃度
           </h3>
           <canvas id="hourChart" height="200"></canvas>
         </div>
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-xs font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot emerald"></span> 周活跃分布
           </h3>
           <canvas id="weekdayChart" height="200"></canvas>
@@ -863,49 +872,49 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-xs font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot blue"></span> 回帖长度分布
           </h3>
           <canvas id="lengthChart" height="180"></canvas>
         </div>
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-xs font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot amber"></span> 点亮统计
           </h3>
           <div class="space-y-2.5 text-sm">
-            <div class="flex justify-between"><span class="text-gray-500">总点亮</span><span class="font-bold text-gray-800">{{ detailedAnalysis.light_stats.total_lights.toLocaleString() }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">平均点亮</span><span class="font-bold text-gray-800">{{ detailedAnalysis.light_stats.avg_lights.toFixed(1) }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">最高点亮</span><span class="font-bold text-amber-600">{{ detailedAnalysis.light_stats.max_lights }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">被点亮回帖</span><span class="font-bold text-gray-800">{{ detailedAnalysis.light_stats.replied_count }}</span></div>
-            <div class="flex justify-between pt-2 border-t border-gray-100"><span class="text-gray-500">引用率</span><span class="font-bold text-indigo-600">{{ (detailedAnalysis.quote_rate * 100).toFixed(1) }}%</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">总点亮</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.light_stats.total_lights.toLocaleString() }}</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">平均点亮</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.light_stats.avg_lights.toFixed(1) }}</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">最高点亮</span><span class="font-bold text-amber-600 dark:text-amber-400">{{ detailedAnalysis.light_stats.max_lights }}</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">被点亮回帖</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.light_stats.replied_count }}</span></div>
+            <div class="flex justify-between pt-2 border-t border-gray-100 dark:border-gray-800"><span class="text-gray-500 dark:text-gray-400">引用率</span><span class="font-bold text-indigo-400 dark:text-indigo-400">{{ (detailedAnalysis.quote_rate * 100).toFixed(1) }}%</span></div>
           </div>
         </div>
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-          <h3 class="text-xs font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+          <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot emerald"></span> 回帖长度
           </h3>
           <div class="space-y-2.5 text-sm">
-            <div class="flex justify-between"><span class="text-gray-500">平均</span><span class="font-bold text-gray-800">{{ detailedAnalysis.length_stats.avg.toFixed(1) }} 字</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">中位数</span><span class="font-bold text-gray-800">{{ detailedAnalysis.length_stats.median }} 字</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">最短</span><span class="font-bold text-gray-800">{{ detailedAnalysis.length_stats.min }} 字</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">最长</span><span class="font-bold text-gray-800">{{ detailedAnalysis.length_stats.max }} 字</span></div>
-            <div class="flex justify-between pt-2 border-t border-gray-100"><span class="text-gray-500">引用回帖</span><span class="font-bold text-indigo-600">{{ detailedAnalysis.total_quotes }} 条</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">平均</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.length_stats.avg.toFixed(1) }} 字</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">中位数</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.length_stats.median }} 字</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">最短</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.length_stats.min }} 字</span></div>
+            <div class="flex justify-between"><span class="text-gray-500 dark:text-gray-400">最长</span><span class="font-bold text-gray-800 dark:text-gray-100">{{ detailedAnalysis.length_stats.max }} 字</span></div>
+            <div class="flex justify-between pt-2 border-t border-gray-100 dark:border-gray-800"><span class="text-gray-500 dark:text-gray-400">引用回帖</span><span class="font-bold text-indigo-400 dark:text-indigo-400">{{ detailedAnalysis.total_quotes }} 条</span></div>
           </div>
         </div>
       </div>
 
       <!-- Top replied posts -->
-      <div v-if="detailedAnalysis.top_replied_posts.length" class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 border border-gray-100 animate-card">
-        <h3 class="text-xs font-bold text-gray-700 mb-4 flex items-center">
+      <div v-if="detailedAnalysis.top_replied_posts.length" class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-5 border border-gray-100 dark:border-gray-800 animate-card">
+        <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot blue"></span> 回帖最多的帖子
         </h3>
         <div class="space-y-1">
           <div v-for="(post, idx) in detailedAnalysis.top_replied_posts.slice(0, 5)" :key="post.tid"
             class="flex items-center gap-3 text-sm py-2.5 border-b border-gray-50 last:border-0">
-            <span class="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 shadow-sm" :style="darkMode ? 'background: rgba(67,56,202,0.25); color: #a5b4fc;' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #1d4ed8;'">{{ post.count }} 次</span>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 shadow-sm" style="background: var(--tag-indigo-bg); color: var(--tag-indigo-color)">{{ post.count }} 次</span>
             <span class="text-gray-400 text-xs font-mono w-5 shrink-0">{{ idx + 1 }}.</span>
-            <a :href="'https://bbs.hupu.com/' + post.tid + '.html'" target="_blank" class="text-gray-700 hover:text-indigo-600 truncate font-medium transition-colors">{{ post.title }}</a>
+            <a :href="'https://bbs.hupu.com/' + post.tid + '.html'" target="_blank" class="text-gray-700 dark:text-gray-200 hover:text-indigo-600 dark:hover:text-indigo-400 truncate font-medium transition-colors">{{ post.title }}</a>
           </div>
         </div>
       </div>
@@ -913,42 +922,42 @@
 
     <!-- AI Analysis Results -->
     <div v-if="aiResult" class="max-w-6xl mx-auto px-4 mt-6">
-      <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
+      <h2 class="text-base font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center">
         <span class="section-dot purple"></span> AI 智能分析
-        <span class="text-xs font-normal text-gray-400 ml-2">AI 分析</span>
+        <span class="text-xs font-normal text-gray-400 dark:text-gray-500 ml-2">AI 分析</span>
       </h2>
 
       <!-- User Portrait -->
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 mb-4 p-5 stat-card accent-violet animate-card">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 mb-4 p-5 stat-card accent-violet animate-card">
         <div class="flex items-center gap-3 mb-5">
           <span class="text-xs font-bold px-3 py-1.5 rounded-full text-white shadow-sm" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">用户画像</span>
-          <span class="text-lg font-bold text-gray-800">{{ aiResult.user_portrait.overall_impression }}</span>
+          <span class="text-lg font-bold text-gray-800 dark:text-gray-100">{{ aiResult.user_portrait.overall_impression }}</span>
         </div>
 
         <div class="mb-5 pl-0.5">
-          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">主要关注领域</h3>
+          <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">主要关注领域</h3>
           <div class="flex flex-wrap gap-2">
             <span v-for="interest in aiResult.user_portrait.main_interests" :key="interest"
               class="text-sm px-3.5 py-1.5 rounded-full font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-              :style="darkMode ? 'background: linear-gradient(135deg, rgba(67,56,202,0.25), rgba(99,102,241,0.15)); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3);' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #1d4ed8; border: 1px solid #bfdbfe;'">
+              style="background: var(--tag-indigo-bg); color: var(--tag-indigo-color); border: 1px solid var(--tag-indigo-border)">
               {{ interest }}
             </span>
           </div>
         </div>
 
         <div v-if="aiResult.user_portrait.stance_profile.length" class="pl-0.5">
-          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">立场分布</h3>
+          <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">立场分布</h3>
           <div class="space-y-3">
             <div v-for="item in aiResult.user_portrait.stance_profile" :key="item.topic"
               class="flex items-center gap-3">
-              <span class="text-sm text-gray-700 w-20 shrink-0 truncate font-medium">{{ item.topic }}</span>
-              <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+              <span class="text-sm text-gray-700 dark:text-gray-200 w-20 shrink-0 truncate font-medium">{{ item.topic }}</span>
+              <div class="flex-1 bg-gray-100 dark:bg-dark-elevated rounded-full h-2 overflow-hidden">
                 <div class="h-2 rounded-full transition-all duration-700 ease-out"
                   :class="item.stance === 'positive' ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : (item.stance === 'negative' ? 'bg-gradient-to-r from-rose-400 to-rose-500' : 'bg-gradient-to-r from-gray-300 to-gray-400')"
                   :style="{ width: (item.intensity * 100) + '%' }"></div>
               </div>
               <span class="text-xs w-14 text-right shrink-0 font-bold"
-                :class="item.stance === 'positive' ? 'text-emerald-600' : (item.stance === 'negative' ? 'text-rose-600' : 'text-gray-500')">
+                :class="item.stance === 'positive' ? 'text-emerald-600 dark:text-emerald-400' : (item.stance === 'negative' ? 'text-rose-600 dark:text-rose-400' : 'text-gray-500 dark:text-gray-400')">
                 {{ item.stance === 'positive' ? '支持' : (item.stance === 'negative' ? '反对' : '中立') }}
               </span>
             </div>
@@ -958,30 +967,30 @@
 
       <!-- Viewpoints -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-5 animate-card">
-          <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-5 animate-card">
+          <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot purple"></span> 核心观点
           </h3>
           <ul class="space-y-2.5">
             <li v-for="vp in aiResult.viewpoint_summary.core_viewpoints" :key="vp"
-              class="text-sm text-gray-700 flex items-start gap-2.5 leading-relaxed">
+              class="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2.5 leading-relaxed">
               <span class="w-1.5 h-1.5 rounded-full bg-purple-400 mt-1.5 shrink-0"></span>
               {{ vp }}
             </li>
           </ul>
-          <div v-if="aiResult.viewpoint_summary.controversial_topics.length" class="mt-4 pt-3 border-t border-gray-100">
-            <span class="text-xs font-medium text-gray-500">争议话题：</span>
+          <div v-if="aiResult.viewpoint_summary.controversial_topics.length" class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">争议话题：</span>
             <span v-for="(ct, idx) in aiResult.viewpoint_summary.controversial_topics" :key="ct"
-              class="text-xs text-amber-600 font-semibold">{{ ct }}<template v-if="idx < aiResult.viewpoint_summary.controversial_topics.length - 1">、</template></span>
+              class="text-xs text-amber-600 dark:text-amber-400 font-semibold">{{ ct }}<template v-if="idx < aiResult.viewpoint_summary.controversial_topics.length - 1">、</template></span>
           </div>
         </div>
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-5 animate-card">
-          <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+        <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-5 animate-card">
+          <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
             <span class="section-dot amber"></span> 独特视角
           </h3>
           <ul class="space-y-2.5">
             <li v-for="up in aiResult.viewpoint_summary.unique_perspectives" :key="up"
-              class="text-sm text-gray-700 flex items-start gap-2.5 leading-relaxed">
+              class="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2.5 leading-relaxed">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0"></span>
               {{ up }}
             </li>
@@ -990,78 +999,78 @@
       </div>
 
       <!-- Behavioral Patterns -->
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-5 mb-4 animate-card">
-        <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-5 mb-4 animate-card">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot emerald"></span> 行为模式
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div class="rounded-xl p-4 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(67,56,202,0.15), rgba(99,102,241,0.08));' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">回帖风格</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.behavioral_patterns.reply_style }}</div>
+          <div class="rounded-xl p-4 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-indigo)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">回帖风格</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.behavioral_patterns.reply_style }}</div>
           </div>
-          <div class="rounded-xl p-4 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(6,78,59,0.15), rgba(16,185,129,0.08));' : 'background: linear-gradient(135deg, #f0fdf4, #dcfce7);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">互动偏好</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.behavioral_patterns.interaction_preference }}</div>
+          <div class="rounded-xl p-4 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-emerald)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">互动偏好</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.behavioral_patterns.interaction_preference }}</div>
           </div>
-          <div class="rounded-xl p-4 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(245,158,11,0.08));' : 'background: linear-gradient(135deg, #fffbeb, #fef3c7);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">讨论深度</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.behavioral_patterns.depth_level }}</div>
+          <div class="rounded-xl p-4 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-amber)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">讨论深度</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.behavioral_patterns.depth_level }}</div>
           </div>
         </div>
       </div>
 
       <!-- Personal Info -->
-      <div v-if="aiResult.personal_info && hasPersonalInfo(aiResult.personal_info)" class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 mb-4 p-5 stat-card accent-violet animate-card">
-        <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center">
+      <div v-if="aiResult.personal_info && hasPersonalInfo(aiResult.personal_info)" class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 mb-4 p-5 stat-card accent-violet animate-card">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4 flex items-center">
           <span class="section-dot purple"></span> 个人信息推断
-          <span class="text-xs font-normal text-gray-400 ml-2">基于发言内容</span>
+          <span class="text-xs font-normal text-gray-400 dark:text-gray-500 ml-2">基于发言内容</span>
         </h3>
 
         <!-- Basic info row -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" v-if="aiResult.personal_info.age_range || aiResult.personal_info.gender || aiResult.personal_info.height_weight || aiResult.personal_info.relationship">
-          <div v-if="aiResult.personal_info.age_range" class="rounded-xl p-3 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(67,56,202,0.2), rgba(99,102,241,0.1));' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe);'">
-            <div class="text-xs text-gray-500 mb-0.5 font-medium">年龄段</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.age_range }}</div>
+          <div v-if="aiResult.personal_info.age_range" class="rounded-xl p-3 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-indigo)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5 font-medium">年龄段</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.age_range }}</div>
           </div>
-          <div v-if="aiResult.personal_info.gender" class="rounded-xl p-3 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(159,18,57,0.2), rgba(244,63,94,0.1));' : 'background: linear-gradient(135deg, #fdf2f8, #fce7f3);'">
-            <div class="text-xs text-gray-500 mb-0.5 font-medium">性别</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.gender }}</div>
+          <div v-if="aiResult.personal_info.gender" class="rounded-xl p-3 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-pink)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5 font-medium">性别</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.gender }}</div>
           </div>
-          <div v-if="aiResult.personal_info.height_weight" class="rounded-xl p-3 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(6,78,59,0.2), rgba(16,185,129,0.1));' : 'background: linear-gradient(135deg, #f0fdf4, #dcfce7);'">
-            <div class="text-xs text-gray-500 mb-0.5 font-medium">身高体重</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.height_weight }}</div>
+          <div v-if="aiResult.personal_info.height_weight" class="rounded-xl p-3 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-emerald)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5 font-medium">身高体重</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.height_weight }}</div>
           </div>
-          <div v-if="aiResult.personal_info.relationship" class="rounded-xl p-3 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(180,83,9,0.2), rgba(245,158,11,0.1));' : 'background: linear-gradient(135deg, #fffbeb, #fef3c7);'">
-            <div class="text-xs text-gray-500 mb-0.5 font-medium">感情状况</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.relationship }}</div>
+          <div v-if="aiResult.personal_info.relationship" class="rounded-xl p-3 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-amber)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5 font-medium">感情状况</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.relationship }}</div>
           </div>
         </div>
 
         <!-- Geography row -->
-        <div v-if="aiResult.personal_info.hometown || aiResult.personal_info.current_city" class="flex items-center gap-3 mb-4 p-4 rounded-xl border border-gray-100" :style="darkMode ? 'background: linear-gradient(135deg, rgba(30,41,59,0.6), rgba(15,23,42,0.4));' : 'background: linear-gradient(135deg, #f8fafc, #f1f5f9);'">
+        <div v-if="aiResult.personal_info.hometown || aiResult.personal_info.current_city" class="flex items-center gap-3 mb-4 p-4 rounded-xl border border-gray-100 dark:border-gray-800" style="background: var(--gradient-slate)">
           <div class="flex items-center gap-2" v-if="aiResult.personal_info.hometown">
-            <span class="text-xs text-gray-500 font-medium">籍贯</span>
-            <span class="text-sm font-bold text-gray-800 bg-white px-3 py-1 rounded-lg shadow-sm border border-gray-200">{{ aiResult.personal_info.hometown }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-medium">籍贯</span>
+            <span class="text-sm font-bold text-gray-800 dark:text-gray-100 bg-white px-3 py-1 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">{{ aiResult.personal_info.hometown }}</span>
           </div>
           <div v-if="aiResult.personal_info.hometown && aiResult.personal_info.current_city" class="text-gray-400 text-lg">&rarr;</div>
           <div class="flex items-center gap-2" v-if="aiResult.personal_info.current_city">
-            <span class="text-xs text-gray-500 font-medium">现居</span>
-            <span class="text-sm font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg shadow-sm border border-indigo-200">{{ aiResult.personal_info.current_city }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-medium">现居</span>
+            <span class="text-sm font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-[rgba(49,46,129,0.35)] px-3 py-1 rounded-lg shadow-sm border border-indigo-200">{{ aiResult.personal_info.current_city }}</span>
           </div>
         </div>
 
         <!-- Education & Career row -->
         <div v-if="aiResult.personal_info.education || aiResult.personal_info.study_abroad || aiResult.personal_info.profession || aiResult.personal_info.income_hint" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-          <div v-if="aiResult.personal_info.education || aiResult.personal_info.study_abroad" class="rounded-xl p-4 border border-gray-100" :style="darkMode ? 'background: linear-gradient(135deg, rgba(91,33,182,0.15), rgba(139,92,246,0.08));' : 'background: linear-gradient(135deg, #faf5ff, #f3e8ff);'">
-            <div class="text-xs text-gray-500 mb-2 font-medium">教育背景</div>
-            <div v-if="aiResult.personal_info.education" class="text-sm font-bold text-gray-800 mb-1">{{ aiResult.personal_info.education }}</div>
+          <div v-if="aiResult.personal_info.education || aiResult.personal_info.study_abroad" class="rounded-xl p-4 border border-gray-100 dark:border-gray-800" style="background: var(--gradient-purple)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium">教育背景</div>
+            <div v-if="aiResult.personal_info.education" class="text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">{{ aiResult.personal_info.education }}</div>
             <div v-if="aiResult.personal_info.study_abroad" class="text-sm text-purple-700 font-medium flex items-center gap-1">
               <span class="w-1 h-1 rounded-full bg-purple-400"></span> {{ aiResult.personal_info.study_abroad }}
             </div>
           </div>
-          <div v-if="aiResult.personal_info.profession || aiResult.personal_info.income_hint" class="rounded-xl p-4 border border-gray-100" :style="darkMode ? 'background: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(249,115,22,0.08));' : 'background: linear-gradient(135deg, #fff7ed, #ffedd5);'">
-            <div class="text-xs text-gray-500 mb-2 font-medium">职业与经济</div>
-            <div v-if="aiResult.personal_info.profession" class="text-sm font-bold text-gray-800 mb-1">{{ aiResult.personal_info.profession }}</div>
+          <div v-if="aiResult.personal_info.profession || aiResult.personal_info.income_hint" class="rounded-xl p-4 border border-gray-100 dark:border-gray-800" style="background: var(--gradient-orange)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium">职业与经济</div>
+            <div v-if="aiResult.personal_info.profession" class="text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">{{ aiResult.personal_info.profession }}</div>
             <div v-if="aiResult.personal_info.income_hint" class="text-sm text-orange-700 font-medium flex items-center gap-1">
               <span class="w-1 h-1 rounded-full bg-orange-400"></span> {{ aiResult.personal_info.income_hint }}
             </div>
@@ -1070,91 +1079,91 @@
 
         <!-- Property row -->
         <div v-if="aiResult.personal_info.car || aiResult.personal_info.housing" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-          <div v-if="aiResult.personal_info.car" class="rounded-xl p-3 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(6,78,59,0.2), rgba(16,185,129,0.1));' : 'background: linear-gradient(135deg, #f0fdf4, #dcfce7);'">
-            <div class="text-xs text-gray-500 mb-0.5 font-medium">座驾</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.car }}</div>
+          <div v-if="aiResult.personal_info.car" class="rounded-xl p-3 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-emerald)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5 font-medium">座驾</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.car }}</div>
           </div>
-          <div v-if="aiResult.personal_info.housing" class="rounded-xl p-3 text-center border border-gray-100 shadow-sm" :style="darkMode ? 'background: linear-gradient(135deg, rgba(67,56,202,0.2), rgba(99,102,241,0.1));' : 'background: linear-gradient(135deg, #eff6ff, #dbeafe);'">
-            <div class="text-xs text-gray-500 mb-0.5 font-medium">住房</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.housing }}</div>
+          <div v-if="aiResult.personal_info.housing" class="rounded-xl p-3 text-center border border-gray-100 dark:border-gray-800 shadow-sm" style="background: var(--gradient-indigo)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5 font-medium">住房</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.housing }}</div>
           </div>
         </div>
 
         <!-- Tags: teams, hobbies, games -->
         <div class="space-y-3">
           <div v-if="aiResult.personal_info.sports_teams && aiResult.personal_info.sports_teams.length">
-            <span class="text-xs font-medium text-gray-500 mb-1.5 block">支持的主队</span>
+            <span class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">支持的主队</span>
             <div class="flex flex-wrap gap-1.5">
               <span v-for="team in aiResult.personal_info.sports_teams" :key="team"
                 class="text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm"
-                :style="darkMode ? 'background: rgba(159,18,57,0.2); color: #fb7185; border: 1px solid rgba(252,165,165,0.3);' : 'background: linear-gradient(135deg, #fef2f2, #fee2e2); color: #dc2626; border: 1px solid #fecaca;'">{{ team }}</span>
+                style="background: var(--tag-rose-bg); color: var(--tag-rose-color); border: 1px solid var(--tag-rose-border)">{{ team }}</span>
             </div>
           </div>
           <div v-if="aiResult.personal_info.hobbies && aiResult.personal_info.hobbies.length">
-            <span class="text-xs font-medium text-gray-500 mb-1.5 block">兴趣爱好</span>
+            <span class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">兴趣爱好</span>
             <div class="flex flex-wrap gap-1.5">
               <span v-for="h in aiResult.personal_info.hobbies" :key="h"
                 class="text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm"
-                :style="darkMode ? 'background: rgba(6,78,59,0.2); color: #34d399; border: 1px solid rgba(167,243,208,0.3);' : 'background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; border: 1px solid #a7f3d0;'">{{ h }}</span>
+                style="background: var(--tag-emerald-bg); color: var(--tag-emerald-color); border: 1px solid var(--tag-emerald-border)">{{ h }}</span>
             </div>
           </div>
           <div v-if="aiResult.personal_info.games && aiResult.personal_info.games.length">
-            <span class="text-xs font-medium text-gray-500 mb-1.5 block">游戏</span>
+            <span class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">游戏</span>
             <div class="flex flex-wrap gap-1.5">
               <span v-for="g in aiResult.personal_info.games" :key="g"
                 class="text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm"
-                :style="darkMode ? 'background: rgba(91,33,182,0.2); color: #a78bfa; border: 1px solid rgba(196,181,253,0.3);' : 'background: linear-gradient(135deg, #faf5ff, #ede9fe); color: #7c3aed; border: 1px solid #c4b5fd;'">{{ g }}</span>
+                style="background: var(--tag-purple-bg); color: var(--tag-purple-color); border: 1px solid var(--tag-purple-border)">{{ g }}</span>
             </div>
           </div>
         </div>
 
         <!-- Personality & political -->
         <div v-if="aiResult.personal_info.personality_traits || aiResult.personal_info.political_stance" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-          <div v-if="aiResult.personal_info.personality_traits" class="rounded-xl p-3 border border-gray-100" :style="darkMode ? 'background: rgba(30,41,59,0.5);' : 'background: linear-gradient(135deg, #f8fafc, #f1f5f9);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">性格特征</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.personality_traits }}</div>
+          <div v-if="aiResult.personal_info.personality_traits" class="rounded-xl p-3 border border-gray-100 dark:border-gray-800" style="background: var(--gradient-slate)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">性格特征</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.personality_traits }}</div>
           </div>
-          <div v-if="aiResult.personal_info.political_stance" class="rounded-xl p-3 border border-gray-100" :style="darkMode ? 'background: rgba(30,41,59,0.5);' : 'background: linear-gradient(135deg, #f8fafc, #f1f5f9);'">
-            <div class="text-xs text-gray-500 mb-1 font-medium">政治倾向</div>
-            <div class="text-sm font-bold text-gray-800">{{ aiResult.personal_info.political_stance }}</div>
+          <div v-if="aiResult.personal_info.political_stance" class="rounded-xl p-3 border border-gray-100 dark:border-gray-800" style="background: var(--gradient-slate)">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 font-medium">政治倾向</div>
+            <div class="text-sm font-bold text-gray-800 dark:text-gray-100">{{ aiResult.personal_info.political_stance }}</div>
           </div>
         </div>
 
         <!-- Other clues -->
-        <div v-if="aiResult.personal_info.other_clues && aiResult.personal_info.other_clues.length" class="mt-4 p-3 rounded-xl border border-gray-200" :style="darkMode ? 'background: rgba(30,41,59,0.6); border-color: rgba(71,85,105,0.5);' : 'background: #f9fafb;'">
-          <span class="text-xs font-medium text-gray-500 mb-1.5 block">其他线索</span>
+        <div v-if="aiResult.personal_info.other_clues && aiResult.personal_info.other_clues.length" class="mt-4 p-3 rounded-xl border border-gray-200 dark:border-gray-800" style="background: var(--clues-bg); border-color: var(--clues-border)">
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 block">其他线索</span>
           <ul class="space-y-1">
             <li v-for="clue in aiResult.personal_info.other_clues" :key="clue"
-              class="text-sm text-gray-700 flex items-start gap-2">
+              class="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2">
               <span class="w-1 h-1 rounded-full bg-gray-400 mt-1.5 shrink-0"></span> {{ clue }}
             </li>
           </ul>
         </div>
 
         <!-- Confidence note -->
-        <div v-if="aiResult.personal_info.confidence_note" class="mt-4 text-xs text-gray-400 italic text-center">
+        <div v-if="aiResult.personal_info.confidence_note" class="mt-4 text-xs text-gray-400 dark:text-gray-500 italic text-center">
           {{ aiResult.personal_info.confidence_note }}
         </div>
       </div>
 
       <!-- Summary -->
-      <div v-if="aiResult.summary" class="rounded-2xl border p-5 mb-6 animate-card" :style="darkMode ? 'background: linear-gradient(135deg, rgba(91,33,182,0.12), rgba(99,102,241,0.08)); border-color: rgba(139,92,246,0.3);' : 'background: linear-gradient(135deg, #faf5ff, #eff6ff); border-color: #c4b5fd;'">
-        <h3 class="text-sm font-bold text-purple-800 mb-2 flex items-center">
+      <div v-if="aiResult.summary" class="rounded-2xl border p-5 mb-6 animate-card" style="background: var(--gradient-summary); border-color: var(--summary-border)">
+        <h3 class="text-sm font-bold text-purple-800 dark:text-purple-300 mb-2 flex items-center">
           <span class="section-dot purple"></span> 综合评语
         </h3>
-        <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ aiResult.summary }}</p>
+        <p class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-line">{{ aiResult.summary }}</p>
       </div>
     </div>
 
     <!-- Similarity Groups -->
     <div v-if="groups.length" class="max-w-6xl mx-auto px-4 mt-6 pb-12">
-      <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center">
+      <h2 class="text-base font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center">
         <span class="section-dot indigo"></span> 相似回帖组
-        <span class="text-xs font-medium text-gray-400 ml-2 bg-gray-100 px-2 py-0.5 rounded-full">{{ groups.length }} 组</span>
+        <span class="text-xs font-medium text-gray-400 dark:text-gray-500 ml-2 bg-gray-100 dark:bg-dark-elevated px-2 py-0.5 rounded-full">{{ groups.length }} 组</span>
       </h2>
 
       <div v-for="group in groups" :key="group.group_id"
-        class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 mb-3 overflow-hidden animate-card">
+        class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 mb-3 overflow-hidden animate-card">
         <!-- Group Header -->
         <div class="px-5 py-3.5 flex items-center justify-between cursor-pointer hover:bg-gray-50/60 transition-colors duration-200"
           @click="toggleGroup(group.group_id)">
@@ -1162,15 +1171,15 @@
             <span class="text-xs font-bold px-2.5 py-1 rounded-full text-white shadow-sm shrink-0" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">
               #{{ group.group_id }}
             </span>
-            <span class="text-sm font-semibold text-gray-800 truncate">{{ group.representative }}</span>
+            <span class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{{ group.representative }}</span>
           </div>
           <div class="flex items-center gap-3 text-sm shrink-0">
             <span class="text-gray-400 text-xs">出现 <b class="text-gray-700">{{ group.count }}</b> 次</span>
-            <span :class="group.similarity === 'exact' || group.similarity >= 0.99 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'"
+            <span :class="group.similarity === 'exact' || group.similarity >= 0.99 ? 'text-emerald-700 bg-emerald-50 dark:bg-[rgba(6,78,59,0.3)] border-emerald-200' : 'text-amber-700 bg-amber-50 dark:bg-[rgba(180,83,9,0.3)] border-amber-200'"
               class="text-xs font-bold px-2 py-1 rounded-full border">
               {{ group.similarity === 'exact' || group.similarity >= 0.99 ? '完全相同' : (group.similarity * 100).toFixed(0) + '%' }}
             </span>
-            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+            <svg class="w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200"
               :class="{ 'rotate-180': expandedGroups[group.group_id] }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
             </svg>
@@ -1178,21 +1187,20 @@
         </div>
 
         <!-- Group Replies (expanded) -->
-        <div v-show="expandedGroups[group.group_id]" class="border-t border-gray-100" :style="{ background: darkMode ? 'linear-gradient(180deg, #1e293b, #0f172a)' : 'linear-gradient(180deg, #f9fafb, #f3f4f6)' }">
+        <div v-show="expandedGroups[group.group_id]" class="border-t border-gray-100 dark:border-gray-800" style="background: var(--group-bg)">
           <div class="px-5 py-3">
             <div class="flex flex-wrap gap-1.5 mb-3">
               <span v-for="(cnt, topic) in group.topic_distribution" :key="topic"
-                class="text-xs bg-white/80 border border-gray-200 px-2.5 py-1 rounded-full font-medium shadow-sm"
-                :class="darkMode ? 'text-gray-300 bg-slate-700/80 border-slate-600' : 'text-gray-600'">
+                class="text-xs text-gray-600 dark:text-gray-300 bg-white/80 dark:bg-dark-surface dark:bg-slate-700/80 border border-gray-200 dark:border-gray-800 dark:border-slate-600 px-2.5 py-1 rounded-full font-medium shadow-sm">
                 {{ topic }} &times;{{ cnt }}
               </span>
             </div>
             <div v-for="reply in group.replies" :key="reply.pid"
-              class="flex items-start gap-3 py-2.5 border-b border-gray-200/60 last:border-0">
-              <span class="text-xs text-gray-400 w-20 shrink-0 pt-0.5 font-mono">{{ reply.format_time }}</span>
+              class="flex items-start gap-3 py-2.5 border-b border-gray-200/60 dark:border-gray-800 last:border-0">
+              <span class="text-xs text-gray-400 dark:text-gray-500 w-20 shrink-0 pt-0.5 font-mono">{{ reply.format_time }}</span>
               <div class="flex-1 min-w-0">
-                <div class="text-sm leading-relaxed" :class="darkMode ? 'text-gray-200' : 'text-gray-800'">{{ reply.content }}</div>
-                <div class="text-xs text-gray-400 mt-1">
+                <div class="text-sm leading-relaxed text-gray-800 dark:text-gray-200">{{ reply.content }}</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
                   {{ reply.title }}
                   <span v-if="reply.light_count > 0" class="text-amber-500 font-semibold ml-2">&#128293; {{ reply.light_count }} 亮</span>
                 </div>
@@ -1210,12 +1218,12 @@
   <div v-if="activeTab === 'qa'" class="max-w-4xl mx-auto px-4 pt-4 pb-12">
     <!-- User info -->
     <div v-if="qaUsername" class="mt-6 animate-card">
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 border border-gray-100 flex items-center gap-3">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] p-4 border border-gray-100 dark:border-gray-800 flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm" style="background: linear-gradient(135deg, #10b981, #059669);">
           {{ qaUsername.charAt(0) }}
         </div>
         <div>
-          <span class="font-semibold text-gray-800">{{ qaUsername }}</span>
+          <span class="font-semibold text-gray-800 dark:text-gray-100">{{ qaUsername }}</span>
           <span class="text-gray-400 text-sm ml-2 font-mono">{{ euid }}</span>
           <span v-if="qaReplyCount > 0 || qaPostCount > 0" class="text-gray-400 text-sm ml-2">
             — {{ qaReplyCount ? qaReplyCount + '条回帖' : '' }}{{ qaReplyCount && qaPostCount ? '，' : '' }}{{ qaPostCount ? qaPostCount + '条发帖' : '' }}可用于问答
@@ -1235,23 +1243,23 @@
         </div>
         <!-- AI Answer Area -->
         <div class="flex justify-start">
-          <div class="max-w-[85%] bg-white/80 backdrop-blur-sm rounded-2xl rounded-bl-md px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100">
+          <div class="max-w-[85%] bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl rounded-bl-md px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800">
             <div class="flex items-center gap-2 mb-2">
               <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white shadow-sm" :class="msg.thinking ? 'bg-amber-400' : ''" :style="msg.thinking ? '' : 'background: linear-gradient(135deg, #10b981, #059669);'">AI</span>
-              <span class="text-xs text-gray-400">{{ msg.time }}</span>
-              <span v-if="!msg.thinking && (msg.promptTokens || msg.completionTokens)" class="text-xs text-gray-400 ml-1 flex items-center gap-1.5"><span>👆{{ fmtTokens(msg.promptTokens) }}</span><span>👇{{ fmtTokens(msg.completionTokens) }}</span></span>
+              <span class="text-xs text-gray-400 dark:text-gray-500">{{ msg.time }}</span>
+              <span v-if="!msg.thinking && (msg.promptTokens || msg.completionTokens)" class="text-xs text-gray-400 dark:text-gray-500 ml-1 flex items-center gap-1.5"><span>👆{{ fmtTokens(msg.promptTokens) }}</span><span>👇{{ fmtTokens(msg.completionTokens) }}</span></span>
             </div>
             <!-- Round traces (shown in real-time as they arrive) -->
             <div v-if="msg.rounds && msg.rounds.length" class="space-y-2 mb-3">
               <div v-for="(r, ri) in msg.rounds" :key="ri">
                 <details :open="ri === msg.rounds.length - 1" class="group">
-                  <summary class="cursor-pointer text-sm text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-1.5 py-1">
+                  <summary class="cursor-pointer text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 transition-colors flex items-center gap-1.5 py-1">
                     <svg class="w-3.5 h-3.5 transition-transform duration-200 group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     <span v-if="r.action === '搜索'" class="text-emerald-600 font-medium">🔍 第{{ r.round }}轮检索</span>
                     <span v-else class="text-indigo-600 font-medium">💬 第{{ r.round }}轮</span>
                     <span v-if="r.keywords && r.keywords.length" class="text-gray-400 text-xs ml-1 truncate max-w-[200px]">关键词：{{ r.keywords.join('、') }}</span>
                   </summary>
-                  <div class="mt-2 pl-5 text-xs text-gray-500 space-y-1 border-l-2 border-gray-100">
+                  <div class="mt-2 pl-5 text-xs text-gray-500 dark:text-gray-400 space-y-1 border-l-2 border-gray-100 dark:border-gray-800">
                     <div v-if="r.reasoning" class="text-gray-600 italic">> {{ r.reasoning }}</div>
                     <div>📊 本轮回帖：{{ r.reply_count }} 条</div>
                     <div>📊 本轮发帖：{{ r.post_count }} 条</div>
@@ -1261,22 +1269,22 @@
               </div>
             </div>
             <!-- Thinking dots -->
-            <div v-if="msg.thinking && !msg.answer" class="thinking-dots text-sm text-gray-500 font-medium">
+            <div v-if="msg.thinking && !msg.answer" class="thinking-dots text-sm text-gray-500 dark:text-gray-400 font-medium">
               <span>.</span><span>.</span><span>.</span>
             </div>
             <!-- Final Answer -->
-            <div v-if="msg.answer" class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ msg.answer }}</div>
-            <div v-if="msg.error" class="text-sm text-rose-600 mt-1">{{ msg.error }}</div>
+            <div v-if="msg.answer" class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{{ msg.answer }}</div>
+            <div v-if="msg.error" class="text-sm text-rose-600 dark:text-rose-400 mt-1">{{ msg.error }}</div>
             <!-- Prompt detail toggle -->
-            <div v-if="!msg.thinking && msg.promptDetail" class="mt-2 border-t border-gray-100 pt-2">
+            <div v-if="!msg.thinking && msg.promptDetail" class="mt-2 border-t border-gray-100 dark:border-gray-800 pt-2">
               <button @click="togglePromptDetail(idx)"
-                class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                class="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 transition-colors">
                 <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-90': msg.showDetail }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                 </svg>
                 查看请求数据
               </button>
-              <pre v-show="msg.showDetail" class="mt-2 p-3 rounded-lg text-xs text-gray-600 whitespace-pre-wrap font-mono max-h-[30rem] overflow-y-auto" :style="darkMode ? 'background: rgba(30,41,59,0.7); border: 1px solid rgba(71,85,105,0.4); color: #94a3b8;' : 'background: linear-gradient(135deg, #f8fafc, #f1f5f9); border: 1px solid #e5e7eb;'">{{ msg.promptDetail }}</pre>
+              <pre v-show="msg.showDetail" class="mt-2 p-3 rounded-lg text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-[30rem] overflow-y-auto" style="background: var(--prompt-bg); border: 1px solid var(--prompt-border); color: var(--prompt-color)">{{ msg.promptDetail }}</pre>
             </div>
           </div>
         </div>
@@ -1285,17 +1293,17 @@
 
     <!-- Question Input -->
     <div class="mt-6 animate-card">
-      <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-4">
+      <div class="bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-4">
         <div class="flex items-center gap-2 mb-3">
-          <span class="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+          <span class="text-sm font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 向 AI 提问
           </span>
-          <span class="text-xs text-gray-400">基于该用户的发帖回帖数据回答</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">基于该用户的发帖回帖数据回答</span>
         </div>
         <div class="flex gap-2">
           <input v-model="qaQuestion" @keyup.enter="askQuestion" placeholder="例如：这个用户喜欢什么球队？他一般在哪些板块活跃？他是做什么工作的？"
             :disabled="qaLoading"
-            class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white/80 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none transition-all duration-200 disabled:opacity-50">
+            class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white/80 dark:bg-dark-surface focus:bg-white focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 outline-none transition-all duration-200 disabled:opacity-50">
           <button @click="askQuestion" :disabled="qaLoading || !qaQuestion.trim() || !euid.trim()"
             class="px-5 py-2.5 rounded-xl text-sm font-medium text-white shadow-sm hover:shadow-md disabled:opacity-40 disabled:shadow-none transition-all duration-200 active:scale-95 flex items-center gap-1.5"
             style="background: linear-gradient(135deg, #10b981, #059669);">
@@ -1306,15 +1314,15 @@
             <span v-else>提问</span>
           </button>
         </div>
-        <div v-if="qaError" class="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-sm">{{ qaError }}</div>
-        <div v-if="!euid.trim()" class="mt-2 text-xs text-gray-400">请先在顶部搜索框选择或输入要查询的用户 euid</div>
+        <div v-if="qaError" class="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-[rgba(159,18,57,0.3)] border border-rose-200 dark:border-[rgba(159,18,57,0.4)] text-rose-600 dark:text-rose-400 text-sm">{{ qaError }}</div>
+        <div v-if="!euid.trim()" class="mt-2 text-xs text-gray-400 dark:text-gray-500">请先在顶部搜索框选择或输入要查询的用户 euid</div>
       </div>
     </div>
 
     <!-- Suggested Questions -->
     <div v-if="euid.trim()" class="mt-4 animate-card">
-      <div class="bg-white/60 backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 p-4">
-        <span class="text-xs font-medium text-gray-500 mb-2 block">建议问题</span>
+      <div class="bg-white/60 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-4">
+        <span class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">建议问题</span>
         <div class="flex flex-wrap gap-2">
           <button v-for="q in suggestedQuestions" :key="q" @click="qaQuestion = q; askQuestion()"
             :disabled="qaLoading"
