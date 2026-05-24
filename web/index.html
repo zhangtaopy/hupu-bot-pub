@@ -1255,15 +1255,26 @@
                 <details :open="ri === msg.rounds.length - 1" class="group">
                   <summary class="cursor-pointer text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 transition-colors flex items-center gap-1.5 py-1">
                     <svg class="w-3.5 h-3.5 transition-transform duration-200 group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    <span v-if="r.action === '搜索'" class="text-emerald-600 font-medium">🔍 第{{ r.round }}轮检索</span>
+                    <span v-if="r.tool_calls && r.tool_calls.length" class="text-indigo-600 dark:text-indigo-400 font-medium">🔧 第{{ r.round }}轮 · 调用 {{ r.tool_calls.length }} 个工具</span>
+                    <span v-else-if="r.action === '搜索'" class="text-emerald-600 font-medium">🔍 第{{ r.round }}轮检索</span>
                     <span v-else class="text-indigo-600 font-medium">💬 第{{ r.round }}轮</span>
-                    <span v-if="r.keywords && r.keywords.length" class="text-gray-400 text-xs ml-1 truncate max-w-[200px]">关键词：{{ r.keywords.join('、') }}</span>
+                    <span v-if="r.keywords && r.keywords.length && !r.tool_calls" class="text-gray-400 text-xs ml-1 truncate max-w-[200px]">关键词：{{ r.keywords.join('、') }}</span>
                   </summary>
-                  <div class="mt-2 pl-5 text-xs text-gray-500 dark:text-gray-400 space-y-1 border-l-2 border-gray-100 dark:border-gray-800">
+                  <!-- Legacy keyword search details -->
+                  <div v-if="r.keywords && r.keywords.length && !r.tool_calls" class="mt-2 pl-5 text-xs text-gray-500 dark:text-gray-400 space-y-1 border-l-2 border-gray-100 dark:border-gray-800">
                     <div v-if="r.reasoning" class="text-gray-600 italic">> {{ r.reasoning }}</div>
                     <div>📊 本轮回帖：{{ r.reply_count }} 条</div>
                     <div>📊 本轮发帖：{{ r.post_count }} 条</div>
                     <div v-if="r.search_tables && r.search_tables.length">📁 搜索表：{{ r.search_tables.join('、') }}</div>
+                  </div>
+                  <!-- Tool call details -->
+                  <div v-if="r.tool_calls && r.tool_calls.length" class="mt-2 pl-5 space-y-1.5 border-l-2 border-indigo-200 dark:border-indigo-900">
+                    <div v-for="(tc, tci) in r.tool_calls" :key="tci" class="text-xs text-gray-500 dark:text-gray-400">
+                      <span class="font-medium text-indigo-500 dark:text-indigo-400">{{ tc.tool_name }}</span>
+                      <span class="text-gray-400 dark:text-gray-500 ml-1">({{ tc.args_summary }})</span>
+                      <span class="ml-1">→ {{ tc.result_summary }}</span>
+                    </div>
+                    <div class="text-xs text-gray-400">📊 累计回帖：{{ r.reply_count }} 条 · 发帖：{{ r.post_count }} 条</div>
                   </div>
                 </details>
               </div>
@@ -2078,8 +2089,20 @@ createApp({
                   reply_count: event.reply_count || 0,
                   post_count: event.post_count || 0,
                   reasoning: event.reasoning || '',
+                  tool_calls: event.tool_calls || null,
                 });
-                await nextTick(); // force Vue to re-render immediately
+                await nextTick();
+              } else if (event.type === 'tool_call') {
+                const currentRound = entry.rounds.find(r => r.round === event.round);
+                if (currentRound) {
+                  if (!currentRound.tool_calls) currentRound.tool_calls = [];
+                  currentRound.tool_calls.push({
+                    tool_name: event.tool_name,
+                    args_summary: event.args_summary,
+                    result_summary: event.result_summary,
+                  });
+                }
+                await nextTick();
               } else if (event.type === 'answer') {
                 entry.thinking = false;
                 entry.answer = event.answer || '';

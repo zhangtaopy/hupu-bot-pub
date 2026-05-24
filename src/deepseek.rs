@@ -57,6 +57,11 @@ impl AiProvider {
     fn use_json_mode(&self) -> bool {
         matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. } | AiProvider::OpenCode { .. })
     }
+
+    /// Whether this provider supports tool calling.
+    pub fn supports_tool_calling(&self) -> bool {
+        matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. } | AiProvider::OpenCode { .. })
+    }
 }
 
 /// Truncate `s` to at most `max_chars` characters at a valid UTF-8 boundary.
@@ -151,12 +156,32 @@ pub struct AgentTrace {
     pub search_tables: Vec<String>,
     pub reply_count: usize,
     pub post_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCallTrace>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolCallTrace {
+    pub tool_name: String,
+    pub args_summary: String,
+    pub result_summary: String,
 }
 
 impl AgentTrace {
     pub fn format_md(&self) -> String {
-        if self.keywords.is_empty() {
-            // Non-search action (final answer, forced summary, etc.)
+        if let Some(ref tc) = self.tool_calls {
+            let tool_details: Vec<String> = tc.iter()
+                .map(|t| format!("🔧 {}({}) → {}", t.tool_name, t.args_summary, t.result_summary))
+                .collect();
+            format!(
+                "<details>\n<summary>💬 第{}轮：调用 {} 个工具</summary>\n\n{}\n\n- 累计回帖: {} 条\n- 累计发帖: {} 条\n</details>",
+                self.round,
+                tc.len(),
+                tool_details.join("\n\n"),
+                self.reply_count,
+                self.post_count,
+            )
+        } else if self.keywords.is_empty() {
             format!(
                 "<details>\n<summary>💬 第{}轮：{}</summary>\n\n- 累计回帖: {} 条\n- 累计发帖: {} 条\n</details>",
                 self.round,
@@ -197,6 +222,278 @@ pub struct AgentAction {
     pub reasoning: String,
     #[serde(default)]
     pub answer: String,
+}
+
+// ── Tool Calling data structures ──
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolDefinition {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub function: ToolFunction,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolFunction {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub function: ToolCallFunction,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToolCallFunction {
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
+pub struct ToolCallResponse {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub function: ToolCallFunctionResponse,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
+pub struct ToolCallFunctionResponse {
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum ChatMessage {
+    System { content: String },
+    User { content: String },
+    Assistant { content: String },
+    AssistantWithToolCalls { content: Option<String>, tool_calls: Vec<ToolCall>, reasoning_content: Option<String> },
+    ToolResult { tool_call_id: String, content: String },
+}
+
+impl ChatMessage {
+    fn to_json(&self) -> serde_json::Value {
+        match self {
+            ChatMessage::System { content } => serde_json::json!({
+                "role": "system",
+                "content": content,
+            }),
+            ChatMessage::User { content } => serde_json::json!({
+                "role": "user",
+                "content": content,
+            }),
+            ChatMessage::Assistant { content } => serde_json::json!({
+                "role": "assistant",
+                "content": content,
+            }),
+            ChatMessage::AssistantWithToolCalls { content, tool_calls, reasoning_content } => {
+                let calls: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
+                    serde_json::json!({
+                        "id": tc.id,
+                        "type": tc.r#type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    })
+                }).collect();
+                let mut map = serde_json::json!({
+                    "role": "assistant",
+                    "tool_calls": calls,
+                });
+                if let Some(c) = content {
+                    map["content"] = serde_json::json!(c);
+                }
+                if let Some(rc) = reasoning_content {
+                    map["reasoning_content"] = serde_json::json!(rc);
+                }
+                map
+            }
+            ChatMessage::ToolResult { tool_call_id, content } => serde_json::json!({
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": content,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LlmToolResponse {
+    pub content: Option<String>,
+    pub tool_calls: Vec<ToolCall>,
+    pub token_usage: TokenUsage,
+    pub reasoning_content: Option<String>,
+}
+
+pub const QA_TOOL_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你可以使用以下工具来查询数据库中的用户信息，然后基于查询结果回答提问者的问题。
+
+## 关键规则
+
+你分析的对象是"用户基本信息"中的那个用户，不是提问者。在回答中：
+- 永远用第三人称（他/她/用户名）来描述分析对象
+- 禁止用"你"来称呼分析对象，因为提问者和分析对象是不同的人
+
+## 可用工具
+
+1. **search_by_keywords** - 按关键词搜索回帖/发帖，适合查找特定内容
+2. **search_by_time_range** - 按时间范围搜索，适合时间趋势分析
+3. **get_topic_stats** - 获取板块分布统计，适合了解用户活跃板块
+4. **get_hot_content** - 获取热门内容，适合了解用户最有影响力的帖子
+5. **get_user_stats** - 获取用户综合统计，适合总体概览
+6. **get_ai_profile** - 获取AI分析画像，适合深入了解用户特征
+
+## 工作流程
+
+1. 先理解提问者的问题
+2. 选择合适的工具查询数据（可以多次调用不同工具）
+3. 基于查询结果，直接给出自然友好的回答
+
+## 注意事项
+
+- 同一个工具不要重复调用相同参数
+- 如果已经获得了足够的信息，直接回答，不要再调用工具
+- 回答要具体，引用数据作为支撑
+- 回答风格自然友好，像在聊天"#;
+
+pub fn build_qa_tools() -> Vec<ToolDefinition> {
+    vec![
+        ToolDefinition {
+            r#type: "function".to_string(),
+            function: ToolFunction {
+                name: "search_by_keywords".to_string(),
+                description: "按关键词搜索用户的回帖和发帖。适合查找特定话题、观点或内容。".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "keywords": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "搜索关键词列表，如[\"篮球\", \"NBA\"]"
+                        },
+                        "tables": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "搜索哪些表，可选值：\"replies\"、\"posts\"，或同时包含两者。默认搜索全部"
+                        },
+                        "topic_filter": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "板块过滤，如[\"步行街\"]。空数组表示不过滤"
+                        },
+                        "sort_by": {
+                            "type": "string",
+                            "description": "排序方式：\"relevance\"（默认）、\"create_time\"、\"light_count\""
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "最大返回条数，默认50"
+                        }
+                    },
+                    "required": ["keywords"]
+                }),
+            },
+        },
+        ToolDefinition {
+            r#type: "function".to_string(),
+            function: ToolFunction {
+                name: "search_by_time_range".to_string(),
+                description: "按时间范围搜索用户的回帖和发帖，用于分析用户在不同时段的活动情况。时间格式为YYYY-MM。".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "start_date": {
+                            "type": "string",
+                            "description": "开始月份，格式YYYY-MM，如\"2024-01\""
+                        },
+                        "end_date": {
+                            "type": "string",
+                            "description": "结束月份，格式YYYY-MM，如\"2024-12\""
+                        },
+                        "tables": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "搜索哪些表，可选值：\"replies\"、\"posts\"，或同时包含两者"
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "最大返回条数，默认50"
+                        }
+                    },
+                    "required": ["start_date", "end_date"]
+                }),
+            },
+        },
+        ToolDefinition {
+            r#type: "function".to_string(),
+            function: ToolFunction {
+                name: "get_topic_stats".to_string(),
+                description: "获取用户在各板块的回帖分布统计，了解用户主要在哪些板块活跃。".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+            },
+        },
+        ToolDefinition {
+            r#type: "function".to_string(),
+            function: ToolFunction {
+                name: "get_hot_content".to_string(),
+                description: "获取用户最热门的回帖或发帖，按点赞数、回复数或浏览数排序。".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "string",
+                            "description": "\"replies\"或\"posts\""
+                        },
+                        "sort_by": {
+                            "type": "string",
+                            "description": "排序方式：\"light_count\"/\"lights\"（点赞）、\"replies\"（回复）、\"visits\"（浏览）。默认lights"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "返回条数，默认10"
+                        }
+                    },
+                    "required": ["table"]
+                }),
+            },
+        },
+        ToolDefinition {
+            r#type: "function".to_string(),
+            function: ToolFunction {
+                name: "get_user_stats".to_string(),
+                description: "获取用户综合统计数据，包括总回帖数、总发帖数、活跃时间范围、板块分布等。".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+            },
+        },
+        ToolDefinition {
+            r#type: "function".to_string(),
+            function: ToolFunction {
+                name: "get_ai_profile".to_string(),
+                description: "获取AI对该用户的分析画像，包括观点倾向、关注话题、个人信息推断等。".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+            },
+        },
+    ]
 }
 
 const QA_AGENT_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你的任务是通过多轮数据库搜索，逐步收集信息，最终回答提问者关于某个用户的的问题。
@@ -374,7 +671,7 @@ struct DeepSeekResponse {
     error: Option<ApiError>,
 }
 
-#[derive(Deserialize, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
@@ -387,7 +684,11 @@ struct Choice {
 
 #[derive(Deserialize)]
 struct ChoiceMessage {
-    content: String,
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<ToolCall>>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -669,7 +970,8 @@ async fn call_llm(
         .ok_or_else(|| anyhow::anyhow!("No choices in LLM response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
         .message
         .content
-        .clone();
+        .clone()
+        .unwrap_or_default();
 
     // json_object mode should return valid JSON, but LLMs may still emit
     // unescaped control characters or truncate on token limits.
@@ -738,9 +1040,65 @@ async fn call_llm_text(
         .ok_or_else(|| anyhow::anyhow!("No choices in LLM response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
         .message
         .content
-        .clone();
+        .clone()
+        .unwrap_or_default();
 
     Ok((content, body.usage.unwrap_or_default()))
+}
+
+/// Call LLM with tool calling support. Returns content (if any) and tool_calls.
+pub async fn call_llm_with_tools(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    messages: &[ChatMessage],
+    tools: &[ToolDefinition],
+) -> Result<LlmToolResponse> {
+    let messages_json: Vec<serde_json::Value> = messages.iter().map(|m| m.to_json()).collect();
+    let tools_json: Vec<serde_json::Value> = tools.iter().map(|t| serde_json::to_value(t).unwrap()).collect();
+
+    let request_body = serde_json::json!({
+        "model": provider.model(),
+        "messages": messages_json,
+        "max_tokens": 8192,
+        "tools": tools_json,
+    });
+
+    let resp = client
+        .post(provider.base_url())
+        .header("Authorization", format!("Bearer {}", provider.api_key()))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let raw_text = resp.text().await?;
+
+    let body: DeepSeekResponse = serde_json::from_str(&raw_text)
+        .map_err(|e| anyhow::anyhow!("Tool calling 解码响应失败: {}，原始响应: {}", e, safe_truncate(&raw_text, 2000)))?;
+
+    if let Some(err) = body.error {
+        bail!("Tool calling LLM API error: {} ({:?})", err.message, err.type_);
+    }
+
+    if !status.is_success() {
+        bail!("Tool calling LLM API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
+    }
+
+    let choice = body.choices
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No choices in tool calling response"))?;
+
+    let content = choice.message.content.clone();
+    let tool_calls = choice.message.tool_calls.clone().unwrap_or_default();
+    let reasoning_content = choice.message.reasoning_content.clone();
+
+    Ok(LlmToolResponse {
+        content,
+        tool_calls,
+        token_usage: body.usage.unwrap_or_default(),
+        reasoning_content,
+    })
 }
 
 // ── Public entry points ──

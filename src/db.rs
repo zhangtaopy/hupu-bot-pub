@@ -636,6 +636,143 @@ pub fn search_posts(
     Ok(result)
 }
 
+/// Query post topic distribution for a given euid.
+pub fn query_post_topic_distribution(
+    conn: &Connection,
+    euid: &str,
+) -> Result<HashMap<String, usize>> {
+    let mut stmt = conn.prepare(
+        "SELECT topic_name, COUNT(*) as cnt FROM posts WHERE euid = ? AND topic_name IS NOT NULL AND topic_name != '' GROUP BY topic_name ORDER BY cnt DESC",
+    )?;
+
+    let mut dist = HashMap::new();
+    let rows = stmt.query_map(rusqlite::params![euid], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+    })?;
+
+    for row in rows {
+        let (name, count) = row?;
+        dist.insert(name, count);
+    }
+    Ok(dist)
+}
+
+/// Search replies by time range (YYYY-MM format), filtered by euid.
+pub fn search_replies_by_time(
+    conn: &Connection,
+    euid: &str,
+    start_date: &str,
+    end_date: &str,
+    max_results: usize,
+) -> Result<Vec<ReplyRow>> {
+    let sql = format!(
+        "SELECT pid, tid, puid, euid, username, content,
+                quote, quote_pid, quote_tid, quote_puid, quote_euid,
+                quote_username, quote_content, quote_create_time,
+                create_time, light_count, unlight_count,
+                title, topic_id, topic_name, format_time
+         FROM replies WHERE euid = ? AND strftime('%Y-%m', create_time, 'unixepoch') BETWEEN ? AND ?
+         ORDER BY create_time DESC LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        rusqlite::params![euid, start_date, end_date, max_results as i64],
+        row_to_reply,
+    )?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Search posts by time range (YYYY-MM format), filtered by euid.
+pub fn search_posts_by_time(
+    conn: &Connection,
+    euid: &str,
+    start_date: &str,
+    end_date: &str,
+    max_results: usize,
+) -> Result<Vec<PostRow>> {
+    let sql = format!(
+        "SELECT tid, euid, username, title, summary,
+                create_time, lastpost_time, replies, visits, lights,
+                recommend_num, forum_name, topic_name, topic_id,
+                total_pics, has_video, share_num, format_time
+         FROM posts WHERE euid = ? AND strftime('%Y-%m', create_time, 'unixepoch') BETWEEN ? AND ?
+         ORDER BY create_time DESC LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        rusqlite::params![euid, start_date, end_date, max_results as i64],
+        row_to_post,
+    )?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Get hot replies sorted by light_count.
+pub fn get_hot_replies(
+    conn: &Connection,
+    euid: &str,
+    sort_by: &str,
+    limit: usize,
+) -> Result<Vec<ReplyRow>> {
+    let order = match sort_by {
+        "light_count" => "light_count DESC",
+        _ => "light_count DESC",
+    };
+    let sql = format!(
+        "SELECT pid, tid, puid, euid, username, content,
+                quote, quote_pid, quote_tid, quote_puid, quote_euid,
+                quote_username, quote_content, quote_create_time,
+                create_time, light_count, unlight_count,
+                title, topic_id, topic_name, format_time
+         FROM replies WHERE euid = ? ORDER BY {} LIMIT ?",
+        order
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params![euid, limit as i64], row_to_reply)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Get hot posts sorted by lights, replies, or visits.
+pub fn get_hot_posts(
+    conn: &Connection,
+    euid: &str,
+    sort_by: &str,
+    limit: usize,
+) -> Result<Vec<PostRow>> {
+    let order = match sort_by {
+        "lights" => "lights DESC",
+        "replies" => "replies DESC",
+        "visits" => "visits DESC",
+        _ => "lights DESC",
+    };
+    let sql = format!(
+        "SELECT tid, euid, username, title, summary,
+                create_time, lastpost_time, replies, visits, lights,
+                recommend_num, forum_name, topic_name, topic_id,
+                total_pics, has_video, share_num, format_time
+         FROM posts WHERE euid = ? ORDER BY {} LIMIT ?",
+        order
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params![euid, limit as i64], row_to_post)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
