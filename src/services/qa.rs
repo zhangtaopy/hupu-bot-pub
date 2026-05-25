@@ -233,8 +233,9 @@ async fn agent_loop_tools(
 
             emit(event_tx, &sse_tool_call_event(round, &tc.function.name, &args_summary, &result_summary)).await;
 
-            let result_content = if result.content.len() > MAX_TOOL_RESULT_CHARS {
-                format!("{}...(结果过长，已截断)", &result.content[..MAX_TOOL_RESULT_CHARS.min(result.content.len())])
+            let result_content = if result.content.chars().count() > MAX_TOOL_RESULT_CHARS {
+                let truncated: String = result.content.chars().take(MAX_TOOL_RESULT_CHARS).collect();
+                format!("{}...(结果过长，已截断)", truncated)
             } else {
                 result.content
             };
