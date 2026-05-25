@@ -9,7 +9,7 @@ const CHUNK_CHARS: usize = 15_000;
 const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/chat/completions";
 const OLLAMA_BASE_URL: &str = "https://ollama.com/v1/chat/completions";
 const OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
-const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1";
+const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/go/v1/chat/completions";
 
 pub const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
 pub const DEFAULT_OLLAMA_MODEL: &str = "gpt-oss:120b";
@@ -1049,7 +1049,7 @@ async fn call_llm_text(
 }
 
 /// Call LLM with optional tool calling support. Returns content (if any) and tool_calls.
-/// Tools should only be provided on the first round to avoid resending large definitions.
+/// Tools should be provided every round, otherwise the API won't return tool_calls.
 pub async fn call_llm_with_tools(
     client: &reqwest::Client,
     provider: &AiProvider,

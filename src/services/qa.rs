@@ -161,8 +161,7 @@ async fn agent_loop_tools(
             break;
         }
 
-        let tools_arg = if round == 1 { Some(tools.as_slice()) } else { None };
-        let response = call_llm_with_tools(http_client, provider, &messages, tools_arg).await?;
+        let response = call_llm_with_tools(http_client, provider, &messages, Some(tools.as_slice())).await?;
 
         let round_usage = &response.token_usage;
         let incr_prompt = if prev_prompt_tokens > 0 {
@@ -591,7 +590,7 @@ fn execute_get_user_stats(
     }
 
     let summary = format!("综合统计: {}条回帖, {}条发帖", ctx.reply_count, ctx.post_count);
-    ToolExecResult { content, summary, reply_count: 0, post_count: 0 }
+    ToolExecResult { content, summary, reply_count: ctx.reply_count as usize, post_count: ctx.post_count as usize }
 }
 
 fn execute_get_ai_profile(
