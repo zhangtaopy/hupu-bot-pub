@@ -65,6 +65,7 @@ fn sse_answer_event(answer: &str, username: &str, detail: &str, usage: &TokenUsa
         "prompt_detail": detail,
         "prompt_tokens": usage.prompt_tokens,
         "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.prompt_tokens + usage.completion_tokens,
     })).unwrap_or_else(|e| {
         eprintln!("[qa] sse_answer_event serialize error: {e}");
         String::new()
@@ -140,6 +141,7 @@ async fn agent_loop_tools(
     let mut traces: Vec<AgentTrace> = Vec::new();
     let mut total_usage = TokenUsage::default();
     let mut round = 0;
+    let mut prev_prompt_tokens: u32 = 0;
 
     loop {
         round += 1;
@@ -159,7 +161,20 @@ async fn agent_loop_tools(
             break;
         }
 
-        if total_usage.prompt_tokens > MAX_PROMPT_TOKENS {
+        let tools_arg = if round == 1 { Some(tools.as_slice()) } else { None };
+        let response = call_llm_with_tools(http_client, provider, &messages, tools_arg).await?;
+
+        let round_usage = &response.token_usage;
+        let incr_prompt = if prev_prompt_tokens > 0 {
+            round_usage.prompt_tokens.saturating_sub(prev_prompt_tokens)
+        } else {
+            round_usage.prompt_tokens
+        };
+        total_usage.prompt_tokens += incr_prompt;
+        total_usage.completion_tokens += round_usage.completion_tokens;
+        prev_prompt_tokens = round_usage.prompt_tokens;
+
+        if round_usage.prompt_tokens > MAX_PROMPT_TOKENS {
             let trace = AgentTrace {
                 round,
                 action: "Token预算超限，生成最终回答".into(),
@@ -175,10 +190,6 @@ async fn agent_loop_tools(
             break;
         }
 
-        let response = call_llm_with_tools(http_client, provider, &messages, &tools).await?;
-        total_usage.prompt_tokens += response.token_usage.prompt_tokens;
-        total_usage.completion_tokens += response.token_usage.completion_tokens;
-
         if response.tool_calls.is_empty() {
             let answer = response.content.unwrap_or_default();
             let trace = AgentTrace {
@@ -193,6 +204,7 @@ async fn agent_loop_tools(
             };
             emit(event_tx, &sse_round_event(&trace)).await;
             traces.push(trace);
+            total_usage.total_tokens = total_usage.prompt_tokens + total_usage.completion_tokens;
             return Ok((answer, traces, total_usage));
         }
 
@@ -234,6 +246,8 @@ async fn agent_loop_tools(
             });
         }
 
+        prune_messages(&mut messages, 3);
+
         let trace = AgentTrace {
             round,
             action: format!("调用{}个工具", tool_call_traces.len()),
@@ -259,8 +273,33 @@ async fn agent_loop_tools(
     ).await?;
     total_usage.prompt_tokens += usage.prompt_tokens;
     total_usage.completion_tokens += usage.completion_tokens;
+    total_usage.total_tokens = total_usage.prompt_tokens + total_usage.completion_tokens;
 
     Ok((answer, traces, total_usage))
+}
+
+/// Keep system + user messages and only the last `max_rounds` rounds of tool-calling history.
+fn prune_messages(messages: &mut Vec<ChatMessage>, max_rounds: usize) {
+    let keep_min = 2;
+    if messages.len() <= keep_min + 1 {
+        return;
+    }
+    let mut round_count = 0;
+    let mut cut = messages.len();
+    for i in (keep_min..messages.len()).rev() {
+        if matches!(messages[i], ChatMessage::AssistantWithToolCalls { .. }) {
+            round_count += 1;
+            if round_count > max_rounds {
+                cut = i;
+                break;
+            }
+        }
+    }
+    if cut < messages.len() {
+        let mut kept: Vec<ChatMessage> = messages[..keep_min].to_vec();
+        kept.extend_from_slice(&messages[cut..]);
+        *messages = kept;
+    }
 }
 
 fn truncate_args_summary(args_json: &str) -> String {

@@ -9,7 +9,7 @@ const CHUNK_CHARS: usize = 15_000;
 const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/chat/completions";
 const OLLAMA_BASE_URL: &str = "https://ollama.com/v1/chat/completions";
 const OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
-const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1/chat/completions";
+const OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1";
 
 pub const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
 pub const DEFAULT_OLLAMA_MODEL: &str = "gpt-oss:120b";
@@ -675,6 +675,8 @@ struct DeepSeekResponse {
 pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
+    #[serde(default)]
+    pub total_tokens: u32,
 }
 
 #[derive(Deserialize)]
@@ -1046,22 +1048,25 @@ async fn call_llm_text(
     Ok((content, body.usage.unwrap_or_default()))
 }
 
-/// Call LLM with tool calling support. Returns content (if any) and tool_calls.
+/// Call LLM with optional tool calling support. Returns content (if any) and tool_calls.
+/// Tools should only be provided on the first round to avoid resending large definitions.
 pub async fn call_llm_with_tools(
     client: &reqwest::Client,
     provider: &AiProvider,
     messages: &[ChatMessage],
-    tools: &[ToolDefinition],
+    tools: Option<&[ToolDefinition]>,
 ) -> Result<LlmToolResponse> {
     let messages_json: Vec<serde_json::Value> = messages.iter().map(|m| m.to_json()).collect();
-    let tools_json: Vec<serde_json::Value> = tools.iter().map(|t| serde_json::to_value(t).unwrap()).collect();
 
-    let request_body = serde_json::json!({
+    let mut request_body = serde_json::json!({
         "model": provider.model(),
         "messages": messages_json,
         "max_tokens": 8192,
-        "tools": tools_json,
     });
+    if let Some(t) = tools {
+        let tools_json: Vec<serde_json::Value> = t.iter().map(|def| serde_json::to_value(def).unwrap()).collect();
+        request_body["tools"] = serde_json::json!(tools_json);
+    }
 
     let resp = client
         .post(provider.base_url())
