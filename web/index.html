@@ -23,6 +23,32 @@
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.0.2/wordcloud2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    /* Markdown rendered content */
+    .md-content h1, .md-content h2, .md-content h3 { font-weight: 600; margin: 0.75em 0 0.35em; }
+    .md-content h1 { font-size: 1.15em; }
+    .md-content h2 { font-size: 1.05em; }
+    .md-content h3 { font-size: 0.95em; }
+    .md-content p { margin: 0.35em 0; }
+    .md-content ul, .md-content ol { padding-left: 1.5em; margin: 0.35em 0; }
+    .md-content li { margin: 0.15em 0; }
+    .md-content code { background: rgba(0,0,0,0.06); padding: 0.15em 0.35em; border-radius: 4px; font-size: 0.9em; }
+    .dark .md-content code { background: rgba(255,255,255,0.08); }
+    .md-content pre { background: rgba(0,0,0,0.05); padding: 0.75em 1em; border-radius: 8px; overflow-x: auto; margin: 0.5em 0; font-size: 0.85em; }
+    .dark .md-content pre { background: rgba(255,255,255,0.05); }
+    .md-content pre code { background: none; padding: 0; }
+    .md-content blockquote { border-left: 3px solid #c7d2fe; padding-left: 0.75em; margin: 0.5em 0; color: #6b7280; }
+    .dark .md-content blockquote { border-color: #4338ca; color: #9ca3af; }
+    .md-content table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.85em; }
+    .md-content th, .md-content td { border: 1px solid #e5e7eb; padding: 0.35em 0.6em; text-align: left; }
+    .dark .md-content th, .dark .md-content td { border-color: #374151; }
+    .md-content th { background: rgba(0,0,0,0.03); font-weight: 600; }
+    .dark .md-content th { background: rgba(255,255,255,0.04); }
+    .md-content strong { font-weight: 600; }
+    .md-content hr { border: none; border-top: 1px solid #e5e7eb; margin: 0.75em 0; }
+    .dark .md-content hr { border-color: #374151; }
+  </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     [v-cloak] { display: none; }
@@ -1319,7 +1345,7 @@
               <span>.</span><span>.</span><span>.</span>
             </div>
             <!-- Final Answer -->
-            <div v-if="msg.answer" class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{{ msg.answer }}</div>
+            <div v-if="msg.answer" class="text-sm text-gray-700 dark:text-gray-200 leading-relaxed md-content" v-html="renderMarkdown(msg.answer)"></div>
             <div v-if="msg.error" class="text-sm text-rose-600 dark:text-rose-400 mt-1">{{ msg.error }}</div>
             <!-- Prompt detail toggle -->
             <div v-if="!msg.thinking && msg.promptDetail" class="mt-2 border-t border-gray-100 dark:border-gray-800 pt-2">
@@ -2232,6 +2258,11 @@ createApp({
       if (msg) msg.showDetail = !msg.showDetail;
     }
 
+    function renderMarkdown(text) {
+      if (typeof marked === 'undefined') return text;
+      return marked.parse(text, { breaks: true });
+    }
+
     async function exportImage() {
       if (typeof html2canvas === 'undefined') {
         error.value = '截图库加载失败，请刷新页面重试';
@@ -2610,7 +2641,7 @@ createApp({
       }
     });
 
-    return { darkMode, toggleDarkMode, activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configModel, providerLabel, providerKeyPlaceholder, providerModelPlaceholder, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail, fmtTokens, userApiProvider, userApiKey, showUserApiPanel, saveUserApiKey, hasUserApiKey, userApiKeyPlaceholder, userApiKeyParams, userCookie, saveUserCookie, hasUserCookie, userCookieParams, hasLocalCredentials };
+    return { darkMode, toggleDarkMode, activeTab, euid, threshold, loading, error, userInfo, stats, groups, wordCloudWords, detailedAnalysis, expandedGroups, toggleGroup, analyze, progressPhase, progressCurrent, progressTotal, aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal, aiAnalyze, exportImage, hasSimilarityResults, similarityLoading, runSimilarity, postsData, postLoading, aiPostLoading, aiPostResult, aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal, sortedPosts, totalReplies, totalVisits, totalLights, videoCount, loadPosts, aiPostAnalyze, fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult, fetchData, fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal, fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent, fetchRepliesProgressTotal, fetchRepliesLoading, hasPersonalInfo, showEuidDropdown, euidsList, filteredEuids, selectEuid, onEuidFocus, onEuidBlur, fetchEuids, displayedEuid, needsConfig, needsAiKey, skipAiKeySetup, configSaving, configError, configCookie, configProvider, configAiKey, configModel, providerLabel, providerKeyPlaceholder, providerModelPlaceholder, saveConfig, qaQuestion, qaHistory, qaLoading, qaError, qaUsername, qaReplyCount, qaPostCount, suggestedQuestions, askQuestion, togglePromptDetail, fmtTokens, userApiProvider, userApiKey, showUserApiPanel, saveUserApiKey, hasUserApiKey, userApiKeyPlaceholder, userApiKeyParams, userCookie, saveUserCookie, hasUserCookie, userCookieParams, hasLocalCredentials, renderMarkdown };
   }
 }).mount('#app');
 </script>
