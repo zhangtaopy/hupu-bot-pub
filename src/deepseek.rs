@@ -1152,6 +1152,35 @@ pub async fn analyze_batch(
     Ok((result.value, result.raw_content))
 }
 
+/// Call `analyze_batch` with up to `max_retries` retries on failure.
+/// Uses exponential backoff (1s, 2s, 4s…) between retries.
+/// Only saves error to DB if ALL retries fail.
+pub async fn analyze_batch_with_retry(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    replies: &[ReplyRow],
+    posts_context: Option<&str>,
+    max_retries: usize,
+) -> Result<(serde_json::Value, String)> {
+    let mut last_err = String::new();
+    for attempt in 0..=max_retries {
+        if attempt > 0 {
+            let base_ms = 1000u64 << (attempt - 1);
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0);
+            let delay = std::time::Duration::from_millis(base_ms + (nanos % 500) as u64);
+            tokio::time::sleep(delay).await;
+        }
+        match analyze_batch(client, provider, replies, posts_context).await {
+            Ok(v) => return Ok(v),
+            Err(e) => last_err = e.to_string(),
+        }
+    }
+    anyhow::bail!("批次分析重试{}次均已失败: {}", max_retries, last_err)
+}
+
 /// Synthesize all batch results into a final user portrait.
 pub async fn synthesize_results(
     client: &reqwest::Client,
@@ -1217,6 +1246,33 @@ pub async fn analyze_post_batch(
 
     let result = call_llm(client, provider, POST_BATCH_SYSTEM_PROMPT, &posts_text).await?;
     Ok((result.value, result.raw_content))
+}
+
+/// Call `analyze_post_batch` with up to `max_retries` retries on failure.
+/// Uses exponential backoff (1s, 2s, 4s…) between retries.
+pub async fn analyze_post_batch_with_retry(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    posts: &[PostRow],
+    max_retries: usize,
+) -> Result<(serde_json::Value, String)> {
+    let mut last_err = String::new();
+    for attempt in 0..=max_retries {
+        if attempt > 0 {
+            let base_ms = 1000u64 << (attempt - 1);
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0);
+            let delay = std::time::Duration::from_millis(base_ms + (nanos % 500) as u64);
+            tokio::time::sleep(delay).await;
+        }
+        match analyze_post_batch(client, provider, posts).await {
+            Ok(v) => return Ok(v),
+            Err(e) => last_err = e.to_string(),
+        }
+    }
+    anyhow::bail!("批次分析重试{}次均已失败: {}", max_retries, last_err)
 }
 
 /// Synthesize all post batch results into a final analysis.

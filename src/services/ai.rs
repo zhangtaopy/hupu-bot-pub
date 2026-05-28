@@ -106,7 +106,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
         join_set.spawn(async move {
             let ctx_ref = posts_ctx.as_deref();
             let result =
-                crate::deepseek::analyze_batch(&client, &provider, &chunk, ctx_ref).await;
+                crate::deepseek::analyze_batch_with_retry(&client, &provider, &chunk, ctx_ref, 1).await;
             if let Err(ref e) = result {
                 if let Ok(conn) = crate::db::open_db(&db_path) {
                     let _ = crate::db::save_batch_error(
@@ -150,7 +150,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
             join_set.spawn(async move {
                 let ctx_ref = posts_ctx.as_deref();
                 let result =
-                    crate::deepseek::analyze_batch(&client, &provider, &chunk, ctx_ref).await;
+                    crate::deepseek::analyze_batch_with_retry(&client, &provider, &chunk, ctx_ref, 1).await;
                 if let Err(ref e) = result {
                     if let Ok(conn) = crate::db::open_db(&db_path) {
                         let _ = crate::db::save_batch_error(
@@ -305,7 +305,7 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
         let euid_c = euid_clone.clone();
         join_set.spawn(async move {
             let result =
-                crate::deepseek::analyze_post_batch(&client, &provider, &chunk).await;
+                crate::deepseek::analyze_post_batch_with_retry(&client, &provider, &chunk, 1).await;
             if let Err(ref e) = result {
                 if let Ok(conn) = crate::db::open_db(&db_path) {
                     let _ = crate::db::save_batch_error(
@@ -347,7 +347,7 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
             let euid_c = euid_clone.clone();
             join_set.spawn(async move {
                 let result =
-                    crate::deepseek::analyze_post_batch(&client, &provider, &chunk).await;
+                    crate::deepseek::analyze_post_batch_with_retry(&client, &provider, &chunk, 1).await;
                 if let Err(ref e) = result {
                     if let Ok(conn) = crate::db::open_db(&db_path) {
                         let _ = crate::db::save_batch_error(
