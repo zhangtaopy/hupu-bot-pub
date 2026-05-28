@@ -8,7 +8,7 @@ use tower_http::cors::CorsLayer;
 
 use types::AppState;
 
-pub async fn start_server(port: u16) -> anyhow::Result<()> {
+pub async fn start_server(port: u16, deploy_mode: bool) -> anyhow::Result<()> {
     let db_path = std::path::PathBuf::from("hupu.db");
     let http_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
@@ -21,6 +21,7 @@ pub async fn start_server(port: u16) -> anyhow::Result<()> {
         ai_results: std::sync::Mutex::new(std::collections::HashMap::new()),
         ai_post_results: std::sync::Mutex::new(std::collections::HashMap::new()),
         http_client,
+        deploy_mode,
     });
 
     let app = Router::new()

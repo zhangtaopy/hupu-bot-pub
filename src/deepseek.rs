@@ -62,6 +62,16 @@ impl AiProvider {
     pub fn supports_tool_calling(&self) -> bool {
         matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. } | AiProvider::OpenCode { .. })
     }
+
+    /// Build from user-supplied provider name and API key, using default models.
+    pub fn from_user_input(provider: &str, api_key: &str) -> Self {
+        match provider {
+            "ollama" => AiProvider::Ollama { api_key: api_key.into(), model: DEFAULT_OLLAMA_MODEL.into() },
+            "openrouter" => AiProvider::OpenRouter { api_key: api_key.into(), model: DEFAULT_OPENROUTER_MODEL.into() },
+            "opencode" => AiProvider::OpenCode { api_key: api_key.into(), model: DEFAULT_OPENCODE_MODEL.into() },
+            _ => AiProvider::DeepSeek { api_key: api_key.into(), model: DEFAULT_DEEPSEEK_MODEL.into() },
+        }
+    }
 }
 
 /// Truncate `s` to at most `max_chars` characters at a valid UTF-8 boundary.

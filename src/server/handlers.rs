@@ -401,26 +401,36 @@ pub async fn start_ai_analysis(
         }
     }
 
-    let cfg = match crate::config::try_get() {
-        Some(cfg) => cfg,
-        None => {
+    let user_provider = match (&params.api_key, &params.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() => {
+            Some(crate::deepseek::AiProvider::from_user_input(prov, key))
+        }
+        _ => None,
+    };
+
+    // If no user-provided key, fall back to config check
+    if user_provider.is_none() {
+        let cfg = match crate::config::try_get() {
+            Some(cfg) => cfg,
+            None => {
+                return Ok(Json(serde_json::json!({
+                    "status": "error",
+                    "error": "请先配置 Cookie",
+                })));
+            }
+        };
+        if cfg.api_key.is_empty() {
             return Ok(Json(serde_json::json!({
                 "status": "error",
-                "error": "请先配置 Cookie",
+                "error": "未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）",
             })));
         }
-    };
-    if cfg.api_key.is_empty() {
-        return Ok(Json(serde_json::json!({
-            "status": "error",
-            "error": "未配置 AI API Key（请在 config.json 中添加 api_key）",
-        })));
     }
 
     let state_clone = state.clone();
     let euid = params.euid.clone();
     tokio::spawn(async move {
-        crate::services::ai::run_ai_analysis_background(state_clone, euid).await;
+        crate::services::ai::run_ai_analysis_background(state_clone, euid, user_provider).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -519,26 +529,36 @@ pub async fn start_ai_post_analysis(
         }
     }
 
-    let cfg = match crate::config::try_get() {
-        Some(cfg) => cfg,
-        None => {
+    let user_provider = match (&params.api_key, &params.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() => {
+            Some(crate::deepseek::AiProvider::from_user_input(prov, key))
+        }
+        _ => None,
+    };
+
+    // If no user-provided key, fall back to config check
+    if user_provider.is_none() {
+        let cfg = match crate::config::try_get() {
+            Some(cfg) => cfg,
+            None => {
+                return Ok(Json(serde_json::json!({
+                    "status": "error",
+                    "error": "请先配置 Cookie",
+                })));
+            }
+        };
+        if cfg.api_key.is_empty() {
             return Ok(Json(serde_json::json!({
                 "status": "error",
-                "error": "请先配置 Cookie",
+                "error": "未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）",
             })));
         }
-    };
-    if cfg.api_key.is_empty() {
-        return Ok(Json(serde_json::json!({
-            "status": "error",
-            "error": "未配置 AI API Key（请在 config.json 中添加 api_key）",
-        })));
     }
 
     let state_clone = state.clone();
     let euid = params.euid.clone();
     tokio::spawn(async move {
-        crate::services::ai::run_ai_post_analysis_background(state_clone, euid).await;
+        crate::services::ai::run_ai_post_analysis_background(state_clone, euid, user_provider).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -600,8 +620,9 @@ pub async fn fetch_replies_handler(
     let euid = params.euid.clone();
     let max_pages = params.max_pages;
     let page_size = params.page_size;
+    let cookie_override = params.cookie.clone();
     tokio::spawn(async move {
-        crate::services::fetch::run_fetch_replies_background(state_clone, euid, max_pages, page_size)
+        crate::services::fetch::run_fetch_replies_background(state_clone, euid, max_pages, page_size, cookie_override)
             .await;
     });
 
@@ -632,8 +653,9 @@ pub async fn fetch_posts_handler(
     let state_clone = state.clone();
     let euid = params.euid.clone();
     let max_pages = params.max_pages;
+    let cookie_override = params.cookie.clone();
     tokio::spawn(async move {
-        crate::services::fetch::run_fetch_posts_background(state_clone, euid, max_pages).await;
+        crate::services::fetch::run_fetch_posts_background(state_clone, euid, max_pages, cookie_override).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -702,31 +724,65 @@ pub async fn qa_ask(
 ) -> Response {
     let (tx, rx) = mpsc::channel::<String>(16);
 
-    let validation_err: Option<String> = match crate::config::try_get() {
-        None => Some("请先配置 Cookie".into()),
-        Some(c) if c.api_key.is_empty() => {
-            Some("未配置 AI API Key（请在 config.json 中添加 api_key）".into())
-        }
-        _ if body.question.trim().is_empty() => Some("问题不能为空".into()),
-        Some(c) => {
+    // Build provider from user-supplied key or fall back to config
+    let validation_err: Option<String> = {
+        let user_provider = match (&body.api_key, &body.provider) {
+            (Some(key), Some(prov)) if !key.is_empty() => {
+                Some(crate::deepseek::AiProvider::from_user_input(prov, key))
+            }
+            _ => None,
+        };
+
+        if let Some(provider) = user_provider {
             let db_path = state.db_path.clone();
             let http_client = state.http_client.clone();
-            let provider = c.ai_provider();
-            let question = body.question;
-            let euid = body.euid;
-            let history = body.history;
+            let question = body.question.clone();
+            let euid = body.euid.clone();
+            let history = body.history.clone();
             let tx_agent = tx.clone();
 
-            tokio::spawn(async move {
-                if let Err(e) = crate::services::qa::run_qa_streaming(
-                    &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
-                ).await {
-                    let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
-                        "type": "error", "error": e.to_string()
-                    })).unwrap_or_default()).await;
+            if question.trim().is_empty() {
+                Some("问题不能为空".into())
+            } else {
+                tokio::spawn(async move {
+                    if let Err(e) = crate::services::qa::run_qa_streaming(
+                        &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
+                    ).await {
+                        let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
+                            "type": "error", "error": e.to_string()
+                        })).unwrap_or_default()).await;
+                    }
+                });
+                None
+            }
+        } else {
+            match crate::config::try_get() {
+                None => Some("请先配置 Cookie".into()),
+                Some(c) if c.api_key.is_empty() => {
+                    Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into())
                 }
-            });
-            None
+                _ if body.question.trim().is_empty() => Some("问题不能为空".into()),
+                Some(c) => {
+                    let db_path = state.db_path.clone();
+                    let http_client = state.http_client.clone();
+                    let provider = c.ai_provider();
+                    let question = body.question;
+                    let euid = body.euid;
+                    let history = body.history;
+                    let tx_agent = tx.clone();
+
+                    tokio::spawn(async move {
+                        if let Err(e) = crate::services::qa::run_qa_streaming(
+                            &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
+                        ).await {
+                            let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
+                                "type": "error", "error": e.to_string()
+                            })).unwrap_or_default()).await;
+                        }
+                    });
+                    None
+                }
+            }
         }
     };
 

@@ -120,6 +120,10 @@ enum Commands {
         /// 端口号
         #[arg(short = 'p', long, default_value = "3000")]
         port: u16,
+
+        /// 部署模式：跳过首次配置引导，用户自行在页面填写 Cookie 和 API Key
+        #[arg(long, default_value = "false")]
+        deploy: bool,
     },
 
     /// 分析用户回帖的相似度，找出重复/近似内容
@@ -268,8 +272,8 @@ async fn main() -> Result<()> {
                 _ => search::format_search_table(&response),
             }
         }
-        Commands::Serve { port } => {
-            server::start_server(port).await?;
+        Commands::Serve { port, deploy } => {
+            server::start_server(port, deploy).await?;
         }
         Commands::Analyze { euid, threshold, format } => {
             config::get(); // ensure config is initialized for CLI

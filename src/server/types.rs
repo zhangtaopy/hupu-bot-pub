@@ -21,6 +21,10 @@ fn default_threshold() -> f64 {
 #[derive(Deserialize)]
 pub struct AiAnalyzeQuery {
     pub euid: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +39,10 @@ pub struct RepliesQuery {
 #[derive(Deserialize)]
 pub struct AiPostAnalyzeQuery {
     pub euid: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -48,6 +56,8 @@ pub struct FetchRepliesQuery {
     pub max_pages: u32,
     #[serde(default = "default_fetch_replies_page_size")]
     pub page_size: u32,
+    #[serde(default)]
+    pub cookie: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -55,6 +65,8 @@ pub struct FetchPostsPagesQuery {
     pub euid: String,
     #[serde(default = "default_fetch_posts_max_pages")]
     pub max_pages: u32,
+    #[serde(default)]
+    pub cookie: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +152,7 @@ pub struct AppState {
     pub ai_results: SyncMutex<HashMap<String, crate::deepseek::AiAnalysisResult>>,
     pub ai_post_results: SyncMutex<HashMap<String, crate::deepseek::AiPostAnalysisResult>>,
     pub http_client: reqwest::Client,
+    pub deploy_mode: bool,
 }
 
 #[derive(Serialize)]
@@ -185,9 +198,13 @@ pub struct QaAskRequest {
     pub question: String,
     #[serde(default)]
     pub history: Vec<HistoryEntry>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct HistoryEntry {
     pub question: String,
     pub answer: String,

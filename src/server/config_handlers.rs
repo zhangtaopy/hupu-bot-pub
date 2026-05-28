@@ -6,19 +6,25 @@ pub struct ConfigStatusResponse {
     pub configured: bool,
     pub has_cookie: bool,
     pub has_api_key: bool,
+    pub deploy_mode: bool,
 }
 
-pub async fn get_config_status() -> Json<ConfigStatusResponse> {
+pub async fn get_config_status(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::server::types::AppState>>,
+) -> Json<ConfigStatusResponse> {
+    let deploy_mode = state.deploy_mode;
     match crate::config::try_get() {
         Some(cfg) => Json(ConfigStatusResponse {
             configured: true,
             has_cookie: !cfg.cookie.is_empty(),
             has_api_key: !cfg.api_key.is_empty(),
+            deploy_mode,
         }),
         None => Json(ConfigStatusResponse {
             configured: false,
             has_cookie: false,
             has_api_key: false,
+            deploy_mode,
         }),
     }
 }

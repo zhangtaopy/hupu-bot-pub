@@ -2,9 +2,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::task::JoinSet;
 
+use crate::deepseek::AiProvider;
 use crate::server::types::{AppState, ProgressState};
 
-pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
+pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String, user_provider: Option<AiProvider>) {
     let key = format!("ai:{}", euid);
 
     let set_progress = |s: &AppState, phase: &str, current: usize, total: usize, done: bool, error: Option<String>| {
@@ -66,14 +67,23 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
         Some(posts_context)
     };
 
-    let cfg = match crate::config::try_get() {
-        Some(cfg) => cfg,
-        None => {
-            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+    let (provider, max_concurrency) = if let Some(p) = user_provider {
+        let mc = crate::config::try_get().map(|c| c.max_concurrency.max(1)).unwrap_or(3);
+        (p, mc)
+    } else {
+        let cfg = match crate::config::try_get() {
+            Some(cfg) => cfg,
+            None => {
+                set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+                return;
+            }
+        };
+        if cfg.api_key.is_empty() {
+            set_progress(&state, "error", 0, 0, true, Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into()));
             return;
         }
+        (cfg.ai_provider(), cfg.max_concurrency.max(1))
     };
-    let provider = cfg.ai_provider();
 
     let mut sorted = all_replies.clone();
     sorted.sort_by(|a, b| a.create_time.cmp(&b.create_time));
@@ -82,7 +92,6 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
 
     set_progress(&state, "AI分批分析中", 0, total_chunks, false, None);
 
-    let max_concurrency = cfg.max_concurrency.max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let failed_count = Arc::new(AtomicUsize::new(0));
     let provider2 = provider.clone();
@@ -218,7 +227,7 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String) {
     set_progress(&state, "完成", total_chunks, total_chunks, true, None);
 }
 
-pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String) {
+pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String, user_provider: Option<AiProvider>) {
     let key = format!("ai_post:{}", euid);
 
     let set_progress = |s: &AppState, phase: &str, current: usize, total: usize, done: bool, error: Option<String>| {
@@ -267,14 +276,23 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
         }
     };
 
-    let cfg = match crate::config::try_get() {
-        Some(cfg) => cfg,
-        None => {
-            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+    let (provider, max_concurrency) = if let Some(p) = user_provider {
+        let mc = crate::config::try_get().map(|c| c.max_concurrency.max(1)).unwrap_or(3);
+        (p, mc)
+    } else {
+        let cfg = match crate::config::try_get() {
+            Some(cfg) => cfg,
+            None => {
+                set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
+                return;
+            }
+        };
+        if cfg.api_key.is_empty() {
+            set_progress(&state, "error", 0, 0, true, Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into()));
             return;
         }
+        (cfg.ai_provider(), cfg.max_concurrency.max(1))
     };
-    let provider = cfg.ai_provider();
 
     let mut sorted = all_posts.clone();
     sorted.sort_by(|a, b| a.create_time.cmp(&b.create_time));
@@ -283,7 +301,6 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String)
 
     set_progress(&state, "AI分批分析帖子中", 0, total_chunks, false, None);
 
-    let max_concurrency = cfg.max_concurrency.max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let failed_count = Arc::new(AtomicUsize::new(0));
     let provider2 = provider.clone();
