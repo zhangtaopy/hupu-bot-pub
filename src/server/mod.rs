@@ -25,7 +25,6 @@ pub async fn start_server(port: u16, deploy_mode: bool) -> anyhow::Result<()> {
     });
 
     let app = Router::new()
-        .route("/", get(handlers::get_index))
         .route("/api/user", get(handlers::get_user))
         .route("/api/stats", get(handlers::get_stats))
         .route("/api/analyze/similarity", get(handlers::get_similarity_analysis))
@@ -49,6 +48,8 @@ pub async fn start_server(port: u16, deploy_mode: bool) -> anyhow::Result<()> {
         .route("/api/qa/ask", post(handlers::qa_ask))
         .route("/api/config/status", get(config_handlers::get_config_status))
         .route("/api/config/save", post(config_handlers::save_config))
+        .route("/", get(handlers::get_index))
+        .route("/*path", get(handlers::static_handler))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

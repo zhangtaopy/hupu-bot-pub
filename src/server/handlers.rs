@@ -1,9 +1,10 @@
 use axum::{
-    extract::Query,
-    http::StatusCode,
-    response::{Html, Json, Response},
+    extract::{Path, Query},
+    http::{StatusCode, header},
+    response::{Json, Response, IntoResponse},
     body::{Body, Bytes},
 };
+use rust_embed::Embed;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -11,10 +12,43 @@ use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 
 use super::types::*;
 
-const INDEX_HTML: &str = include_str!("../../web/index.html");
+#[derive(Embed)]
+#[folder = "web/"]
+struct Assets;
 
-pub async fn get_index() -> Html<&'static str> {
-    Html(INDEX_HTML)
+fn mime_type(path: &str) -> &'static str {
+    if path.ends_with(".html")  { "text/html; charset=utf-8" }
+    else if path.ends_with(".css")  { "text/css; charset=utf-8" }
+    else if path.ends_with(".js")   { "application/javascript; charset=utf-8" }
+    else if path.ends_with(".json") { "application/json" }
+    else if path.ends_with(".png")  { "image/png" }
+    else if path.ends_with(".svg")  { "image/svg+xml" }
+    else if path.ends_with(".ico")  { "image/x-icon" }
+    else { "application/octet-stream" }
+}
+
+pub async fn get_index() -> impl IntoResponse {
+    static_handler(Path("/".to_string())).await
+}
+
+pub async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
+    let asset_path = if path.is_empty() || path == "/" {
+        "index.html"
+    } else {
+        // Strip leading slash
+        path.strip_prefix('/').unwrap_or(&path)
+    };
+
+    match Assets::get(asset_path) {
+        Some(content) => {
+            let mime = mime_type(asset_path);
+            Response::builder()
+                .header(header::CONTENT_TYPE, mime)
+                .body(Body::from(content.data.to_vec()))
+                .unwrap()
+        }
+        None => (StatusCode::NOT_FOUND, "404 Not Found").into_response(),
+    }
 }
 
 pub async fn get_user(
