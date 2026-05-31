@@ -90,21 +90,12 @@ pub async fn run_qa_streaming(
     };
     let history_ctx = crate::deepseek::format_history(history);
 
-    if provider.supports_tool_calling() {
-        let (answer, traces, token_usage) = agent_loop_tools(
-            db_path, http_client, provider, question, euid, &ctx, &history_ctx, Some(event_tx),
-        ).await?;
+    let (answer, traces, token_usage) = agent_loop_tools(
+        db_path, http_client, provider, question, euid, &ctx, &history_ctx, Some(event_tx),
+    ).await?;
 
-        let detail = build_prompt_detail(&traces, &ctx.user_ctx_text);
-        let _ = event_tx.send(sse_answer_event(&answer, &ctx.username, &detail, &token_usage)).await;
-    } else {
-        let (answer, traces, token_usage) = agent_loop_legacy(
-            db_path, http_client, provider, question, euid, &ctx, &history_ctx, Some(event_tx),
-        ).await?;
-
-        let detail = build_prompt_detail(&traces, &ctx.user_ctx_text);
-        let _ = event_tx.send(sse_answer_event(&answer, &ctx.username, &detail, &token_usage)).await;
-    }
+    let detail = build_prompt_detail(&traces, &ctx.user_ctx_text);
+    let _ = event_tx.send(sse_answer_event(&answer, &ctx.username, &detail, &token_usage)).await;
 
     Ok(())
 }
@@ -633,133 +624,59 @@ fn execute_get_ai_profile(
     ToolExecResult { content, summary: summary.to_string(), reply_count: 0, post_count: 0 }
 }
 
-// ── Legacy agent loop (for providers without tool calling support) ──
 
-async fn agent_loop_legacy(
-    db_path: &std::path::Path,
-    http_client: &reqwest::Client,
-    provider: &crate::deepseek::AiProvider,
-    question: &str,
-    euid: &str,
-    ctx: &UserContext,
-    history_ctx: &str,
-    event_tx: Option<&tokio::sync::mpsc::Sender<String>>,
-) -> anyhow::Result<(String, Vec<AgentTrace>, TokenUsage)> {
-    let mut all_replies: Vec<crate::replies::ReplyRow> = Vec::new();
-    let mut all_posts: Vec<crate::posts::PostRow> = Vec::new();
-    let mut seen_reply_pids: HashSet<i64> = HashSet::new();
-    let mut seen_post_tids: HashSet<i64> = HashSet::new();
-    let mut traces: Vec<AgentTrace> = Vec::new();
-    let mut previous_rounds_text = String::new();
-    let mut final_answer = String::new();
-    let mut total_usage = TokenUsage::default();
-    let conn = db::open_db(db_path)?;
+fn build_prompt_detail(traces: &[AgentTrace], user_ctx_text: &str) -> String {
+    let trace_text: String = traces.iter()
+        .map(|t| t.format_md())
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    let max_rounds = 5;
-    for round in 1..=max_rounds {
-        let (action, usage) = crate::deepseek::agent_decide(
-            http_client, provider, question, &ctx.user_ctx_text, history_ctx,
-            &previous_rounds_text, round,
-        ).await?;
-        total_usage.prompt_tokens += usage.prompt_tokens;
-        total_usage.completion_tokens += usage.completion_tokens;
+    format!(
+        "=== 用户上下文 ===\n{}\n\n=== Agent决策过程 ===\n{}",
+        user_ctx_text, trace_text
+    )
+}
 
-        if action.action == "final_answer" {
-            final_answer = action.answer;
-            let trace = AgentTrace {
-                round,
-                action: "给出最终回答".into(),
-                reasoning: String::new(),
-                keywords: vec![],
-                search_tables: vec![],
-                reply_count: all_replies.len(),
-                post_count: all_posts.len(),
-                tool_calls: None,
-            };
-            emit(event_tx, &sse_round_event(&trace)).await;
-            traces.push(trace);
-            break;
-        }
+fn format_personal_info(pi: &serde_json::Value) -> String {
+    let fields: &[(&str, &str)] = &[
+        ("年龄段", "age_range"),
+        ("性别", "gender"),
+        ("身高体重", "height_weight"),
+        ("感情状况", "relationship"),
+        ("籍贯", "hometown"),
+        ("现居城市", "current_city"),
+        ("教育背景", "education"),
+        ("留学经历", "study_abroad"),
+        ("职业", "profession"),
+        ("收入水平", "income_hint"),
+        ("车辆", "car"),
+        ("房产", "housing"),
+        ("性格特征", "personality_traits"),
+        ("政治倾向", "political_stance"),
+    ];
 
-        let search_replies = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "replies");
-        let search_posts = action.search_tables.is_empty() || action.search_tables.iter().any(|t| t == "posts");
-
-        let round_replies = if search_replies && !action.keywords.is_empty() {
-            db::search_replies(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
-        } else {
-            Vec::new()
-        };
-
-        let round_posts = if search_posts && !action.keywords.is_empty() {
-            db::search_posts(&conn, euid, &action.keywords, &action.topic_filter, &action.sort_by, action.max_results)?
-        } else {
-            Vec::new()
-        };
-
-        let new_reply_count = round_replies.iter().filter(|r| !seen_reply_pids.contains(&r.pid)).count();
-        let new_post_count = round_posts.iter().filter(|p| !seen_post_tids.contains(&p.tid)).count();
-
-        for r in &round_replies {
-            if seen_reply_pids.insert(r.pid) {
-                all_replies.push(r.clone());
+    let mut lines = Vec::new();
+    for (label, key) in fields {
+        if let Some(v) = pi.get(key).and_then(|v| v.as_str()) {
+            if !v.is_empty() {
+                lines.push(format!("  {}: {}", label, v));
             }
         }
-        for p in &round_posts {
-            if seen_post_tids.insert(p.tid) {
-                all_posts.push(p.clone());
+    }
+
+    for (label, key) in &[("主队", "sports_teams"), ("爱好", "hobbies"), ("游戏", "games")] {
+        if let Some(arr) = pi.get(key).and_then(|v| v.as_array()) {
+            let items: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+            if !items.is_empty() {
+                lines.push(format!("  {}: {}", label, items.join("、")));
             }
         }
-
-        let round_summary = crate::deepseek::format_search_results_summary(&round_replies, &round_posts);
-        previous_rounds_text.push_str(&format!(
-            "=== 第{}轮搜索 (关键词: {}) ===\n{}\n\n",
-            round,
-            action.keywords.join("、"),
-            round_summary,
-        ));
-
-        let trace = AgentTrace {
-            round,
-            action: "搜索".into(),
-            reasoning: action.reasoning,
-            keywords: action.keywords,
-            search_tables: action.search_tables,
-            reply_count: new_reply_count,
-            post_count: new_post_count,
-            tool_calls: None,
-        };
-        emit(event_tx, &sse_round_event(&trace)).await;
-        traces.push(trace);
     }
 
-    if final_answer.is_empty() {
-        let overview = build_overview(
-            &conn, euid, ctx.reply_count, ctx.post_count,
-            ctx.topic_vec.clone(), ctx.ai_reply_summary.clone(),
-            ctx.ai_post_summary.clone(), ctx.ai_reply_personal_info.clone(),
-        )?;
-        let (answer, usage) = crate::deepseek::generate_answer(
-            http_client, provider, question, &ctx.username, &overview,
-            &all_replies, &all_posts, history_ctx,
-        ).await?;
-        final_answer = answer;
-        total_usage.prompt_tokens += usage.prompt_tokens;
-        total_usage.completion_tokens += usage.completion_tokens;
-        let trace = AgentTrace {
-            round: max_rounds + 1,
-            action: "达到最大轮数，综合所有结果给出最终回答".into(),
-            reasoning: String::new(),
-            keywords: vec![],
-            search_tables: vec![],
-            reply_count: all_replies.len(),
-            post_count: all_posts.len(),
-            tool_calls: None,
-        };
-        emit(event_tx, &sse_round_event(&trace)).await;
-        traces.push(trace);
+    if lines.is_empty() {
+        return String::new();
     }
-
-    Ok((final_answer, traces, total_usage))
+    lines.join("\n")
 }
 
 async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) {
@@ -769,8 +686,6 @@ async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) {
         }
     }
 }
-
-// ── Load user context ──
 
 fn load_user_context(conn: &rusqlite::Connection, euid: &str) -> anyhow::Result<UserContext> {
     let reply_count = db::count_replies(conn, Some(euid))?;
@@ -930,56 +845,3 @@ fn compute_activity_period(conn: &rusqlite::Connection, euid: &str) -> Option<St
     }
 }
 
-fn build_prompt_detail(traces: &[AgentTrace], user_ctx_text: &str) -> String {
-    let trace_text: String = traces.iter()
-        .map(|t| t.format_md())
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    format!(
-        "=== 用户上下文 ===\n{}\n\n=== Agent决策过程 ===\n{}",
-        user_ctx_text, trace_text
-    )
-}
-
-fn format_personal_info(pi: &serde_json::Value) -> String {
-    let fields: &[(&str, &str)] = &[
-        ("年龄段", "age_range"),
-        ("性别", "gender"),
-        ("身高体重", "height_weight"),
-        ("感情状况", "relationship"),
-        ("籍贯", "hometown"),
-        ("现居城市", "current_city"),
-        ("教育背景", "education"),
-        ("留学经历", "study_abroad"),
-        ("职业", "profession"),
-        ("收入水平", "income_hint"),
-        ("车辆", "car"),
-        ("房产", "housing"),
-        ("性格特征", "personality_traits"),
-        ("政治倾向", "political_stance"),
-    ];
-
-    let mut lines = Vec::new();
-    for (label, key) in fields {
-        if let Some(v) = pi.get(key).and_then(|v| v.as_str()) {
-            if !v.is_empty() {
-                lines.push(format!("  {}: {}", label, v));
-            }
-        }
-    }
-
-    for (label, key) in &[("主队", "sports_teams"), ("爱好", "hobbies"), ("游戏", "games")] {
-        if let Some(arr) = pi.get(key).and_then(|v| v.as_array()) {
-            let items: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-            if !items.is_empty() {
-                lines.push(format!("  {}: {}", label, items.join("、")));
-            }
-        }
-    }
-
-    if lines.is_empty() {
-        return String::new();
-    }
-    lines.join("\n")
-}

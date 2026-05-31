@@ -58,11 +58,6 @@ impl AiProvider {
         matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. } | AiProvider::OpenCode { .. })
     }
 
-    /// Whether this provider supports tool calling.
-    pub fn supports_tool_calling(&self) -> bool {
-        matches!(self, AiProvider::DeepSeek { .. } | AiProvider::OpenRouter { .. } | AiProvider::OpenCode { .. })
-    }
-
     /// Build from user-supplied provider name and API key, using default models.
     pub fn from_user_input(provider: &str, api_key: &str) -> Self {
         match provider {

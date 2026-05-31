@@ -758,68 +758,56 @@ pub async fn qa_ask(
 ) -> Response {
     let (tx, rx) = mpsc::channel::<String>(16);
 
-    // Build provider from user-supplied key or fall back to config
-    let validation_err: Option<String> = {
-        let user_provider = match (&body.api_key, &body.provider) {
-            (Some(key), Some(prov)) if !key.is_empty() => {
-                Some(crate::deepseek::AiProvider::from_user_input(prov, key))
-            }
-            _ => None,
-        };
+    let empty_question = body.question.trim().is_empty();
 
-        if let Some(provider) = user_provider {
+    // Determine provider: user-supplied key first, then config fallback
+    let cfg = crate::config::try_get();
+    let maybe_provider = match (&body.api_key, &body.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() => {
+            Some(crate::deepseek::AiProvider::from_user_input(prov, key))
+        }
+        _ => cfg.as_ref().and_then(|c| {
+            if c.api_key.is_empty() { None } else { Some(c.ai_provider()) }
+        }),
+    };
+
+    // Validate
+    let validation_err: Option<String> = match (&maybe_provider, empty_question) {
+        (None, _) => {
+            if cfg.is_none() {
+                Some("请先配置 Cookie".into())
+            } else {
+                Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into())
+            }
+        }
+        (_, true) => Some("问题不能为空".into()),
+        _ => None,
+    };
+
+    // Spawn streaming if valid
+    if let Some(provider) = &maybe_provider {
+        if validation_err.is_none() {
             let db_path = state.db_path.clone();
             let http_client = state.http_client.clone();
+            let provider = provider.clone();
             let question = body.question.clone();
             let euid = body.euid.clone();
             let history = body.history.clone();
             let tx_agent = tx.clone();
 
-            if question.trim().is_empty() {
-                Some("问题不能为空".into())
-            } else {
-                tokio::spawn(async move {
-                    if let Err(e) = crate::services::qa::run_qa_streaming(
-                        &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
-                    ).await {
-                        let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
-                            "type": "error", "error": e.to_string()
-                        })).unwrap_or_default()).await;
-                    }
-                });
-                None
-            }
-        } else {
-            match crate::config::try_get() {
-                None => Some("请先配置 Cookie".into()),
-                Some(c) if c.api_key.is_empty() => {
-                    Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into())
+            tokio::spawn(async move {
+                if let Err(e) = crate::services::qa::run_qa_streaming(
+                    &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
+                ).await {
+                    let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
+                        "type": "error", "error": e.to_string()
+                    })).unwrap_or_default()).await;
                 }
-                _ if body.question.trim().is_empty() => Some("问题不能为空".into()),
-                Some(c) => {
-                    let db_path = state.db_path.clone();
-                    let http_client = state.http_client.clone();
-                    let provider = c.ai_provider();
-                    let question = body.question;
-                    let euid = body.euid;
-                    let history = body.history;
-                    let tx_agent = tx.clone();
-
-                    tokio::spawn(async move {
-                        if let Err(e) = crate::services::qa::run_qa_streaming(
-                            &db_path, &http_client, &provider, &euid, &question, &history, &tx_agent,
-                        ).await {
-                            let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
-                                "type": "error", "error": e.to_string()
-                            })).unwrap_or_default()).await;
-                        }
-                    });
-                    None
-                }
-            }
+            });
         }
-    };
+    }
 
+    // Send validation error through channel
     if let Some(err) = validation_err {
         let tx_err = tx.clone();
         tokio::spawn(async move {
