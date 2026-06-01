@@ -3,7 +3,6 @@ use crate::deepseek::{
     AgentTrace, ToolCallTrace, ChatMessage, TokenUsage, UserOverview,
     build_qa_tools, call_llm_with_tools, QA_TOOL_SYSTEM_PROMPT,
 };
-use std::collections::HashSet;
 
 struct UserContext {
     username: String,
@@ -134,7 +133,15 @@ async fn agent_loop_tools(
     let mut round = 0;
     let mut prev_prompt_tokens: u32 = 0;
 
-    loop {
+    'agent: loop {
+        // Detect client disconnect — stop wasting LLM calls
+        if let Some(tx) = event_tx {
+            if tx.is_closed() {
+                eprintln!("[qa] client disconnected, stopping agent loop");
+                break;
+            }
+        }
+
         round += 1;
         if round > MAX_TOOL_TURNS {
             let trace = AgentTrace {
@@ -222,7 +229,9 @@ async fn agent_loop_tools(
                 result_summary: result_summary.clone(),
             });
 
-            emit(event_tx, &sse_tool_call_event(round, &tc.function.name, &args_summary, &result_summary)).await;
+            if !emit(event_tx, &sse_tool_call_event(round, &tc.function.name, &args_summary, &result_summary)).await {
+                break 'agent;
+            }
 
             let result_content = if result.content.chars().count() > MAX_TOOL_RESULT_CHARS {
                 let truncated: String = result.content.chars().take(MAX_TOOL_RESULT_CHARS).collect();
@@ -249,7 +258,9 @@ async fn agent_loop_tools(
             post_count: total_post_count,
             tool_calls: Some(tool_call_traces),
         };
-        emit(event_tx, &sse_round_event(&trace)).await;
+        if !emit(event_tx, &sse_round_event(&trace)).await {
+            break;
+        }
         traces.push(trace);
     }
 
@@ -271,26 +282,28 @@ async fn agent_loop_tools(
 
 /// Keep system + user messages and only the last `max_rounds` rounds of tool-calling history.
 fn prune_messages(messages: &mut Vec<ChatMessage>, max_rounds: usize) {
-    let keep_min = 2;
+    let keep_min = 2; // system + user
     if messages.len() <= keep_min + 1 {
         return;
     }
-    let mut round_count = 0;
-    let mut cut = messages.len();
-    for i in (keep_min..messages.len()).rev() {
-        if matches!(messages[i], ChatMessage::AssistantWithToolCalls { .. }) {
-            round_count += 1;
-            if round_count > max_rounds {
-                cut = i;
-                break;
-            }
-        }
+    // Collect positions of all AssistantWithToolCalls messages
+    let round_positions: Vec<usize> = messages[keep_min..]
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| matches!(m, ChatMessage::AssistantWithToolCalls { .. }))
+        .map(|(i, _)| keep_min + i)
+        .collect();
+
+    if round_positions.len() <= max_rounds {
+        return; // Within limit, nothing to prune
     }
-    if cut < messages.len() {
-        let mut kept: Vec<ChatMessage> = messages[..keep_min].to_vec();
-        kept.extend_from_slice(&messages[cut..]);
-        *messages = kept;
-    }
+
+    // Keep only the last `max_rounds` rounds (everything from the oldest kept round onward)
+    let keep_from = round_positions[round_positions.len() - max_rounds];
+
+    let mut kept: Vec<ChatMessage> = messages[..keep_min].to_vec();
+    kept.extend_from_slice(&messages[keep_from..]);
+    *messages = kept;
 }
 
 fn truncate_args_summary(args_json: &str) -> String {
@@ -340,8 +353,13 @@ fn execute_tool(
     tool_name: &str,
     arguments_json: &str,
 ) -> ToolExecResult {
-    let args: serde_json::Value = serde_json::from_str(arguments_json)
-        .unwrap_or(serde_json::Value::Null);
+    let args: serde_json::Value = match serde_json::from_str(arguments_json) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[qa] tool arguments JSON parse error for tool '{}': {e}\n  raw: {}", tool_name, arguments_json);
+            serde_json::Value::Null
+        },
+    };
 
     match tool_name {
         "search_by_keywords" => execute_search_by_keywords(conn, euid, &args),
@@ -350,11 +368,14 @@ fn execute_tool(
         "get_hot_content" => execute_get_hot_content(conn, euid, &args),
         "get_user_stats" => execute_get_user_stats(conn, euid, ctx),
         "get_ai_profile" => execute_get_ai_profile(conn, euid, ctx),
-        _ => ToolExecResult {
-            content: "未知工具".to_string(),
-            summary: "未知工具".to_string(),
-            reply_count: 0,
-            post_count: 0,
+        _ => {
+            eprintln!("[qa] unknown tool called by LLM: '{}' args: {}", tool_name, arguments_json);
+            ToolExecResult {
+                content: "未知工具".to_string(),
+                summary: "未知工具".to_string(),
+                reply_count: 0,
+                post_count: 0,
+            }
         },
     }
 }
@@ -679,11 +700,11 @@ fn format_personal_info(pi: &serde_json::Value) -> String {
     lines.join("\n")
 }
 
-async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) {
-    if let Some(tx) = tx {
-        if tx.send(data.to_string()).await.is_err() {
-            eprintln!("[qa] emit error: channel closed");
-        }
+/// Returns true if the data was sent, false if the channel was closed (client disconnected).
+async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) -> bool {
+    match tx {
+        Some(tx) => tx.send(data.to_string()).await.is_ok(),
+        None => true,
     }
 }
 

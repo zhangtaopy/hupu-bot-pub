@@ -138,9 +138,6 @@ const SYNTHESIS_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户画像专
 
 // ── Agent multi-round structures ──
 
-fn default_sort() -> String { "relevance".into() }
-fn default_max_results() -> usize { 50 }
-
 const QA_ANSWER_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。根据用户概览、搜索结果和提问者的问题，给出自然友好的回答。
 
 重要：你分析的对象是"用户概览"中的人，不是提问者。永远用第三人称（他/她/用户名）来描述分析对象，不要用"你"来称呼他。
@@ -210,24 +207,7 @@ impl AgentTrace {
     }
 }
 
-#[derive(Deserialize, Debug)]
-pub struct AgentAction {
-    pub action: String,
-    #[serde(default)]
-    pub keywords: Vec<String>,
-    #[serde(default)]
-    pub search_tables: Vec<String>,
-    #[serde(default)]
-    pub topic_filter: Vec<String>,
-    #[serde(default = "default_sort")]
-    pub sort_by: String,
-    #[serde(default = "default_max_results")]
-    pub max_results: usize,
-    #[serde(default)]
-    pub reasoning: String,
-    #[serde(default)]
-    pub answer: String,
-}
+
 
 // ── Tool Calling data structures ──
 
@@ -501,84 +481,7 @@ pub fn build_qa_tools() -> Vec<ToolDefinition> {
     ]
 }
 
-const QA_AGENT_PROMPT: &str = r#"你是一个虎扑论坛数据分析助手。你的任务是通过多轮数据库搜索，逐步收集信息，最终回答提问者关于某个用户的的问题。
 
-## 关键规则
-
-你分析的对象是"用户基本信息"中的那个用户，不是提问者。在 final_answer 中：
-- 永远用第三人称（他/她/用户名）来描述分析对象
-- 禁止用"你"来称呼分析对象，因为提问者和分析对象是不同的人
-
-## 工作方式
-
-你会收到分析对象的基本信息（统计数据、AI画像等）和提问者的问题。你可以进行多轮搜索，每轮用不同的关键词从不同角度查找信息。
-
-每次你必须输出一个 JSON 对象，包含以下字段之一：
-
-### 搜索操作
-当需要更多信息时输出：
-{"action":"search","keywords":["关键词1","关键词2"],"search_tables":["replies"],"topic_filter":[],"sort_by":"relevance","max_results":50,"reasoning":"为什么需要这轮搜索的简短说明"}
-
-### 最终回答
-当已收集足够信息或无法获取更多时输出：
-{"action":"final_answer","answer":"你的完整回答（用第三人称描述分析对象）"}
-
-## 数据库说明
-
-- replies 表: content(回帖内容), title(帖子标题), topic_name(板块名), create_time(时间戳), light_count(点亮数)
-- posts 表: title(帖子标题), summary(帖子摘要), topic_name(板块名), forum_name(分区名), create_time(时间戳), replies(回复数), visits(浏览数), lights(点亮数)
-
-## 搜索策略
-
-1. 第一轮：根据已知信息和问题生成精准的关键词，广泛搜索
-2. 后续轮次：如果已有结果不够或方向不对，换角度、换关键词
-3. **禁止使用前几轮已经用过的关键词**，每次搜索必须是新的关键词。重复关键词只会浪费一轮搜索
-4. 如果连续搜索都找不到相关信息，承认"根据现有数据无法判断"并结束
-4. search_tables 可选: ["replies"]、["posts"] 或 ["replies","posts"]
-5. sort_by: "relevance" 用于相关性，"create_time" 用于时间顺序，"light_count" 用于热度
-6. max_results: 通常 50，特别需要大量样本时用 80-100
-7. topic_filter: 空数组表示不过滤板块，否则填入板块名
-
-## 核心原则
-
-- 每个 reasoning 要简短说明为什么选这些关键词
-- 如果已有结果已经能充分回答问题，立即输出 final_answer
-- 不要超过 5 轮搜索
-- 回答要基于数据，引用具体内容作为佐证
-- 回答风格自然友好，像在聊天
-- 在 final_answer 的 answer 字段中引用原文或描述时，使用中文引号""而不是英文引号""，以确保JSON格式正确"#;
-
-pub async fn agent_decide(
-    client: &reqwest::Client,
-    provider: &AiProvider,
-    question: &str,
-    user_ctx: &str,
-    history_ctx: &str,
-    previous_rounds: &str,
-    round: usize,
-) -> Result<(AgentAction, TokenUsage)> {
-    let history_block = if history_ctx.is_empty() {
-        String::new()
-    } else {
-        format!("对话历史：\n\n{}\n\n---\n\n", history_ctx)
-    };
-
-    let previous_block = if previous_rounds.is_empty() {
-        String::new()
-    } else {
-        format!("前几轮搜索结果：\n\n{}\n\n---\n\n", previous_rounds)
-    };
-
-    let user_prompt = format!(
-        "{}以下是你要分析的用户的基本信息（注意：这是分析对象，不是提问者）：\n\n{}\n\n---\n\n{}提问者的问题是：{}\n\n---\n\n当前是第 {} 轮。请决定下一步操作。",
-        history_block, user_ctx, previous_block, question, round
-    );
-
-    let result = call_llm(client, provider, QA_AGENT_PROMPT, &user_prompt).await?;
-    let action: AgentAction = serde_json::from_value(result.value)
-        .map_err(|e| anyhow::anyhow!("解析Agent决策失败: {}，原始: {}", e, result.raw_content))?;
-    Ok((action, result.token_usage))
-}
 
 pub fn format_search_results_summary(replies: &[ReplyRow], posts: &[PostRow]) -> String {
     let mut s = String::new();
@@ -912,11 +815,10 @@ pub fn chunk_replies(replies: &[ReplyRow]) -> Vec<Vec<ReplyRow>> {
 
 // ── DeepSeek API call ──
 
-/// Result of a LLM API call: parsed JSON value, the raw content string, and token usage.
+/// Result of a LLM API call: parsed JSON value and the raw content string.
 pub struct DeepSeekResult {
     pub value: serde_json::Value,
     pub raw_content: String,
-    pub token_usage: TokenUsage,
 }
 
 #[derive(Serialize)]
@@ -995,7 +897,7 @@ async fn call_llm(
         }
     };
 
-    Ok(DeepSeekResult { value, raw_content: content, token_usage: body.usage.unwrap_or_default() })
+    Ok(DeepSeekResult { value, raw_content: content })
 }
 
 async fn call_llm_text(
