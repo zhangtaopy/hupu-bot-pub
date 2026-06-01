@@ -3,8 +3,10 @@
  * These are called after data loads, NOT exported to Vue template.
  */
 
+import { generateColors } from '../utils/helpers.js';
+
 export function setupCharts(store) {
-  const { chartInstances, chartTextColor, chartGridColor, generateColors, darkMode } = store;
+  const { chartInstances, chartTextColor, chartGridColor, darkMode } = store;
 
   function renderCharts() {
     if (!store.stats.value) return;
