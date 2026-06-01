@@ -154,7 +154,9 @@ async fn agent_loop_tools(
                 post_count: 0,
                 tool_calls: None,
             };
-            emit(event_tx, &sse_round_event(&trace)).await;
+            if !emit(event_tx, &sse_round_event(&trace)).await {
+                break;
+            }
             traces.push(trace);
             break;
         }
@@ -182,7 +184,9 @@ async fn agent_loop_tools(
                 post_count: 0,
                 tool_calls: None,
             };
-            emit(event_tx, &sse_round_event(&trace)).await;
+            if !emit(event_tx, &sse_round_event(&trace)).await {
+                break;
+            }
             traces.push(trace);
             break;
         }
@@ -199,7 +203,9 @@ async fn agent_loop_tools(
                 post_count: 0,
                 tool_calls: None,
             };
-            emit(event_tx, &sse_round_event(&trace)).await;
+            if !emit(event_tx, &sse_round_event(&trace)).await {
+                break;
+            }
             traces.push(trace);
             total_usage.total_tokens = total_usage.prompt_tokens + total_usage.completion_tokens;
             return Ok((answer, traces, total_usage));
@@ -262,6 +268,11 @@ async fn agent_loop_tools(
             break;
         }
         traces.push(trace);
+    }
+
+    // If client disconnected mid-loop, skip the fallback generate_answer call
+    if event_tx.map(|tx| tx.is_closed()).unwrap_or(false) {
+        return Ok((String::new(), traces, total_usage));
     }
 
     let overview = build_overview(
@@ -703,7 +714,14 @@ fn format_personal_info(pi: &serde_json::Value) -> String {
 /// Returns true if the data was sent, false if the channel was closed (client disconnected).
 async fn emit(tx: Option<&tokio::sync::mpsc::Sender<String>>, data: &str) -> bool {
     match tx {
-        Some(tx) => tx.send(data.to_string()).await.is_ok(),
+        Some(tx) => {
+            if tx.send(data.to_string()).await.is_ok() {
+                true
+            } else {
+                eprintln!("[qa] client disconnected");
+                false
+            }
+        },
         None => true,
     }
 }
