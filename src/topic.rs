@@ -118,6 +118,22 @@ static POST_LINK_REGEX_FALLBACK: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"<a[^>]*href="/(\d{9})\.html"[^>]*>([^<]+)</a>"#).unwrap()
 });
 
+/// Check if the response is a WAF challenge page (Aliyun, Cloudflare, etc.)
+fn check_waf_block(html: &str) -> Result<()> {
+    // Aliyun WAF challenge
+    if html.contains("aliyun_waf_aa") || html.contains("aliyun_waf_bb") {
+        bail!("被反爬系统拦截（阿里云 WAF），请更新 Cookie 或更换 IP");
+    }
+    // Cloudflare / generic JS challenge
+    if html.len() < 500 {
+        let s = html.to_lowercase();
+        if s.contains("challenge") && (s.contains("javascript") || s.contains("cf-")) {
+            bail!("被反爬系统拦截（JS 挑战页面），请更新 Cookie 或更换 IP");
+        }
+    }
+    Ok(())
+}
+
 /// 获取指定 topic 的帖子列表
 pub async fn fetch_topic_posts(
     client: &HupuClient,
@@ -139,6 +155,7 @@ pub async fn fetch_topic_posts(
         .text()
         .await?;
 
+    check_waf_block(&text)?;
     let posts = parse_post_list(&text, limit);
     Ok(posts)
 }
@@ -321,6 +338,7 @@ async fn fetch_post_data(client: &HupuClient, tid: &str) -> Result<NextData> {
         .text()
         .await?;
 
+    check_waf_block(&text)?;
     // 查找 __NEXT_DATA__ 或 {"props":{"pageProps" 格式的 JSON
     let json_str = extract_next_data(&text)?;
 
