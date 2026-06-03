@@ -28,11 +28,11 @@ export function setupMonitorTab(store) {
   // Quick-select topics
   const quickTopics = [
     { id: 'cars', name: '汽车区' },
-    { id: 'all-gambia', name: '步行街' },
-    { id: 'all-lol', name: '英雄联盟' },
-    { id: 'all-nba', name: 'NBA' },
-    { id: 'all-digital', name: '数码区' },
-    { id: 'all-ent', name: '影视区' },
+    { id: 'topic-daily', name: '步行街主干道' },
+    { id: 'lol', name: '英雄联盟' },
+    { id: 'vote', name: '湿乎乎的话题' },
+    { id: 'digital', name: '数码区' },
+    { id: 'ent', name: '影视区' },
   ];
 
   // ── Computed ──

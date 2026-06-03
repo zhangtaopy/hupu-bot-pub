@@ -74,8 +74,11 @@ pub async fn run_fetch_monitor_background(
             Err(_) => std::collections::HashSet::new(),
         };
 
-    let mut total_posts = 0usize;
-    let mut total_replies = 0usize;
+    // ═══════════════════════════════════════════════════════
+    // Phase 1: Collect all new posts from topic listing pages
+    // (fast — just scraping HTML, shouldn't trigger anti-crawl)
+    // ═══════════════════════════════════════════════════════
+    let mut all_new_posts: Vec<topic::Post> = Vec::new();
     let mut skipped_count = 0usize;
     let mut consecutive_empty = 0u32;
     let max_pages = 20;
@@ -83,8 +86,8 @@ pub async fn run_fetch_monitor_background(
 
     for page in 1..=max_pages {
         set_progress(
-            &format!("获取帖子列表 第{}页", page),
-            total_posts,
+            &format!("获取帖子列表 第{}页 (已收集 {} 个新帖)", page, all_new_posts.len()),
+            all_new_posts.len(),
             0, // unknown total → indeterminate bar
             false,
             None,
@@ -95,8 +98,8 @@ pub async fn run_fetch_monitor_background(
             Err(e) => {
                 set_progress(
                     "error",
-                    total_posts,
-                    total_posts,
+                    all_new_posts.len(),
+                    all_new_posts.len(),
                     true,
                     Some(format!("获取帖子列表失败: {}", e)),
                 );
@@ -108,96 +111,123 @@ pub async fn run_fetch_monitor_background(
             break;
         }
 
-        // Filter: skip known TIDs, collect rest (real date check happens after detail fetch)
-        let mut page_new_posts: Vec<&topic::Post> = Vec::new();
-        for post in &posts {
+        let mut page_has_new = false;
+        for post in posts {
             let tid_num: i64 = post.tid.parse().unwrap_or(0);
             if known_tids.contains(&tid_num) {
                 skipped_count += 1;
             } else {
-                page_new_posts.push(post);
+                all_new_posts.push(post);
+                page_has_new = true;
             }
         }
 
-        if page_new_posts.is_empty() {
-            if skipped_count > 0 {
-                continue; // all known TIDs, try next page
-            }
-            break; // truly empty page
-        }
-
-        // For each new post: fetch detail first → check real create_time → then store
-        let mut reply_total = 0usize;
-        let mut page_kept = 0usize;
-        for post in &page_new_posts {
-            let tid_num: i64 = post.tid.parse().unwrap_or(0);
-
-            // Fetch detail page for accurate create_time
-            let (real_ts, real_replies, real_lights, real_author) =
-                match topic::fetch_post_combined(&client, &post.tid, replies_per_post).await {
-                    Ok((detail, replies)) => {
-                        let ts = detail.create_time.as_deref()
-                            .and_then(|t| parse_iso_time(t))
-                            .unwrap_or_else(|| chrono::Utc::now().timestamp());
-
-                        // Check if post is within date range
-                        let post_age_days = (chrono::Utc::now().timestamp() - ts) / 86400;
-                        if post_age_days > days as i64 {
-                            continue; // too old, skip
-                        }
-
-                        // Store replies
-                        if !replies.is_empty() {
-                            if let Err(_) = crate::db::upsert_monitor_replies(
-                                &conn, &topic_id, tid_num, &replies,
-                            ) {} else {
-                                reply_total += replies.len();
-                            }
-                        }
-
-                        (ts, detail.reply_count.unwrap_or(0), detail.light_count.unwrap_or(0), detail.author)
-                    }
-                    Err(_) => {
-                        // Detail unavailable — use listing data (less accurate but better than nothing)
-                        let ts = post.create_time.as_deref()
-                            .and_then(|t| crate::db::parse_post_time_to_ts(t))
-                            .unwrap_or_else(|| chrono::Utc::now().timestamp());
-                        (ts, post.reply_count.unwrap_or(0), post.light_count.unwrap_or(0),
-                         post.author.clone().unwrap_or_default())
-                    }
-                };
-
-            // Insert post with accurate metadata
-            let post_data = vec![topic::Post {
-                tid: post.tid.clone(),
-                title: post.title.clone(),
-                author: Some(real_author.clone()),
-                reply_count: Some(real_replies),
-                light_count: Some(real_lights),
-                create_time: Some(chrono::DateTime::from_timestamp(real_ts, 0)
-                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                    .unwrap_or_default()),
-            }];
-            if let Err(e) = crate::db::upsert_monitor_posts(&conn, &topic_id, &post_data) {
-                eprintln!("[monitor] upsert failed tid={}: {}", post.tid, e);
-            } else {
-                total_posts += 1;
-                page_kept += 1;
-            }
-        }
-        total_replies += reply_total;
-
-        if page_kept == 0 {
+        if !page_has_new {
             consecutive_empty += 1;
             if consecutive_empty >= max_empty_pages {
                 set_progress(
                     &format!("连续{}页无新帖，停止翻页", consecutive_empty),
-                    total_posts, total_posts, false, None,
+                    all_new_posts.len(), all_new_posts.len(), false, None,
                 );
                 break;
             }
         } else {
             consecutive_empty = 0;
+        }
+    }
+
+    let total_new = all_new_posts.len();
+
+    if total_new == 0 {
+        let mut summary = "完成: 0 帖子, 0 热评".to_string();
+        if skipped_count > 0 {
+            summary.push_str(&format!(" | 跳过 {} 条已有帖子", skipped_count));
+        }
+        set_progress(&summary, 0, 0, true, None);
+        return;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Phase 2: Fetch details in batches with a pause between
+    // batches to avoid triggering anti-crawl.
+    // 10 posts per batch, then 2s gap.
+    // ═══════════════════════════════════════════════════════
+    let mut total_posts = 0usize;
+    let mut total_replies = 0usize;
+    let batch_size = 10usize;
+    let batch_delay = std::time::Duration::from_secs(2);
+
+    for (i, post) in all_new_posts.iter().enumerate() {
+        set_progress(
+            &format!("获取详情 {}/{}: {}", i + 1, total_new, truncate_str(&post.title, 30)),
+            i + 1,
+            total_new,
+            false,
+            None,
+        );
+
+        let tid_num: i64 = post.tid.parse().unwrap_or(0);
+
+        // Fetch detail page for accurate create_time + hot replies
+        let (real_ts, real_replies, real_lights, real_author) =
+            match topic::fetch_post_combined(&client, &post.tid, replies_per_post).await {
+                Ok((detail, replies)) => {
+                    let ts = detail.create_time.as_deref()
+                        .and_then(|t| parse_iso_time(t))
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp());
+
+                    // Check if post is within date range
+                    let post_age_days = (chrono::Utc::now().timestamp() - ts) / 86400;
+                    if post_age_days > days as i64 {
+                        continue; // too old, skip — delay handled at end of loop
+                    }
+
+                    // Store replies
+                    if !replies.is_empty() {
+                        if let Err(_) = crate::db::upsert_monitor_replies(
+                            &conn, &topic_id, tid_num, &replies,
+                        ) {} else {
+                            total_replies += replies.len();
+                        }
+                    }
+
+                    (ts, detail.reply_count.unwrap_or(0), detail.light_count.unwrap_or(0), detail.author)
+                }
+                Err(_) => {
+                    // Detail unavailable — use listing data (less accurate but better than nothing)
+                    let ts = post.create_time.as_deref()
+                        .and_then(|t| crate::db::parse_post_time_to_ts(t))
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp());
+                    (ts, post.reply_count.unwrap_or(0), post.light_count.unwrap_or(0),
+                     post.author.clone().unwrap_or_default())
+                }
+            };
+
+        // Insert post with accurate metadata
+        let post_data = vec![topic::Post {
+            tid: post.tid.clone(),
+            title: post.title.clone(),
+            author: Some(real_author.clone()),
+            reply_count: Some(real_replies),
+            light_count: Some(real_lights),
+            create_time: Some(chrono::DateTime::from_timestamp(real_ts, 0)
+                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_default()),
+        }];
+        if let Err(e) = crate::db::upsert_monitor_posts(&conn, &topic_id, &post_data) {
+            eprintln!("[monitor] upsert failed tid={}: {}", post.tid, e);
+        } else {
+            total_posts += 1;
+        }
+
+        // Pause after every batch (10 posts) — skip after the last post
+        let n = i + 1;
+        if n % batch_size == 0 && n < total_new {
+            set_progress(
+                &format!("已获取 {}/{}，暂停 {} 秒...", n, total_new, batch_delay.as_secs()),
+                n, total_new, false, None,
+            );
+            tokio::time::sleep(batch_delay).await;
         }
     }
 
