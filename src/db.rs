@@ -14,6 +14,11 @@ pub fn open_db(db_path: &Path) -> Result<Connection> {
 }
 
 fn create_tables(conn: &Connection) -> Result<()> {
+    // Migration: add ai_raw_json column if missing (added later)
+    let _ = conn.execute_batch(
+        "ALTER TABLE monitor_snapshots ADD COLUMN ai_raw_json TEXT;"
+    );
+
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS replies (
             pid            INTEGER PRIMARY KEY,
@@ -102,7 +107,56 @@ fn create_tables(conn: &Connection) -> Result<()> {
             created_at   INTEGER NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS idx_ai_batch_errors_euid ON ai_batch_errors(euid);",
+        CREATE INDEX IF NOT EXISTS idx_ai_batch_errors_euid ON ai_batch_errors(euid);
+
+        -- 分区舆论监控：帖子
+        CREATE TABLE IF NOT EXISTS monitor_posts (
+            tid            INTEGER PRIMARY KEY,
+            topic_id       INTEGER NOT NULL,
+            title          TEXT NOT NULL,
+            author         TEXT NOT NULL DEFAULT '',
+            reply_count    INTEGER NOT NULL DEFAULT 0,
+            light_count    INTEGER NOT NULL DEFAULT 0,
+            create_time    INTEGER NOT NULL,
+            format_time    TEXT,
+            fetched_at     INTEGER NOT NULL,
+            fetch_date     TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_monitor_posts_topic ON monitor_posts(topic_id);
+        CREATE INDEX IF NOT EXISTS idx_monitor_posts_fetch_date ON monitor_posts(fetch_date);
+
+        -- 分区舆论监控：热评
+        CREATE TABLE IF NOT EXISTS monitor_replies (
+            pid            INTEGER PRIMARY KEY,
+            tid            INTEGER NOT NULL,
+            topic_id       INTEGER NOT NULL,
+            username       TEXT NOT NULL DEFAULT '',
+            content        TEXT NOT NULL,
+            light_count    INTEGER NOT NULL DEFAULT 0,
+            create_time    INTEGER NOT NULL,
+            format_time    TEXT,
+            fetched_at     INTEGER NOT NULL,
+            fetch_date     TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_monitor_replies_topic ON monitor_replies(topic_id);
+        CREATE INDEX IF NOT EXISTS idx_monitor_replies_tid ON monitor_replies(tid);
+        CREATE INDEX IF NOT EXISTS idx_monitor_replies_fetch_date ON monitor_replies(fetch_date);
+
+        -- 分区舆论监控：每日快照（AI分析结果缓存）
+        CREATE TABLE IF NOT EXISTS monitor_snapshots (
+            topic_id       INTEGER NOT NULL,
+            snapshot_date  TEXT NOT NULL,
+            post_count     INTEGER NOT NULL DEFAULT 0,
+            reply_count    INTEGER NOT NULL DEFAULT 0,
+            sentiment_dist TEXT,
+            top_keywords   TEXT,
+            ai_summary     TEXT,
+            ai_raw_json    TEXT,
+            created_at     INTEGER NOT NULL,
+            PRIMARY KEY (topic_id, snapshot_date)
+        );",
     )?;
     Ok(())
 }
@@ -771,6 +825,354 @@ pub fn get_hot_posts(
         result.push(row?);
     }
     Ok(result)
+}
+
+// ── Monitor: 分区舆论监控 ──
+
+use crate::topic::{Post, PostReply};
+
+/// Upsert monitor posts (from topic::Post)
+pub fn upsert_monitor_posts(conn: &Connection, topic_id: &str, posts: &[Post]) -> Result<usize> {
+    let now = chrono::Utc::now().timestamp();
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let tx = conn.unchecked_transaction()?;
+
+    for p in posts {
+        // Try to parse create_time string into Unix timestamp
+        let ts = p.create_time.as_deref()
+            .and_then(|t| parse_post_time_to_ts(t))
+            .unwrap_or(now); // fallback to current time
+
+        tx.execute(
+            "INSERT OR REPLACE INTO monitor_posts (
+                tid, topic_id, title, author, reply_count, light_count,
+                create_time, format_time, fetched_at, fetch_date
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params![
+                p.tid.parse::<i64>().unwrap_or(0),
+                topic_id,
+                p.title,
+                p.author.as_deref().unwrap_or(""),
+                p.reply_count.unwrap_or(0),
+                p.light_count.unwrap_or(0),
+                ts,
+                p.create_time.as_deref(),
+                now,
+                today,
+            ],
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(posts.len())
+}
+
+/// Parse a post time string like "06-02 20:30" or "2026-06-02 20:30" to Unix timestamp
+pub fn parse_post_time_to_ts(s: &str) -> Option<i64> {
+    let now = chrono::Utc::now();
+    let today = now.date_naive();
+
+    // "2026-06-02 20:30"
+    if s.len() >= 16 {
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&s[..16], "%Y-%m-%d %H:%M") {
+            return Some(dt.and_utc().timestamp());
+        }
+    }
+    // "2026-06-02"
+    if s.len() >= 10 {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&s[..10], "%Y-%m-%d") {
+            return Some(d.and_hms_opt(0, 0, 0)?.and_utc().timestamp());
+        }
+    }
+    // "06-02 20:30"
+    if s.len() >= 11 && &s[2..3] == "-" {
+        let year = today.format("%Y").to_string();
+        let full = format!("{}-{}", year, &s[..11]);
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&full, "%Y-%m-%d %H:%M") {
+            return Some(dt.and_utc().timestamp());
+        }
+    }
+    // "06-02"
+    if s.len() >= 5 && &s[2..3] == "-" {
+        let year = today.format("%Y").to_string();
+        let full = format!("{}-{}", year, &s[..5]);
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&full, "%Y-%m-%d") {
+            return Some(d.and_hms_opt(0, 0, 0)?.and_utc().timestamp());
+        }
+    }
+    None
+}
+
+/// Upsert monitor replies (from topic::PostReply)
+pub fn upsert_monitor_replies(conn: &Connection, topic_id: &str, tid: i64, replies: &[PostReply]) -> Result<usize> {
+    let now = chrono::Utc::now().timestamp();
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let tx = conn.unchecked_transaction()?;
+
+    for r in replies {
+        tx.execute(
+            "INSERT OR REPLACE INTO monitor_replies (
+                pid, tid, topic_id, username, content, light_count,
+                create_time, format_time, fetched_at, fetch_date
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params![
+                r.pid.parse::<i64>().unwrap_or(0),
+                tid,
+                topic_id,
+                r.username,
+                r.content,
+                r.light_count,
+                0i64,
+                r.create_time.as_deref(),
+                now,
+                today,
+            ],
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(replies.len())
+}
+
+/// Query monitor posts by topic_id, optionally filtered by date
+pub fn query_monitor_posts(
+    conn: &Connection,
+    topic_id: &str,
+    date: Option<&str>,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<serde_json::Value>> {
+    let sql = match date {
+        Some(_) => format!(
+            "SELECT tid, title, author, reply_count, light_count, create_time, format_time, fetch_date
+             FROM monitor_posts WHERE topic_id = ? AND fetch_date = ? ORDER BY light_count DESC LIMIT ? OFFSET ?"
+        ),
+        None => format!(
+            "SELECT tid, title, author, reply_count, light_count, create_time, format_time, fetch_date
+             FROM monitor_posts WHERE topic_id = ? ORDER BY light_count DESC LIMIT ? OFFSET ?"
+        ),
+    };
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows: Vec<serde_json::Value> = match date {
+        Some(d) => {
+            stmt.query_map(rusqlite::params![topic_id, d, limit as i64, offset as i64], |row| {
+                Ok(serde_json::json!({
+                    "tid": row.get::<_, i64>(0)?,
+                    "title": row.get::<_, String>(1)?,
+                    "author": row.get::<_, String>(2)?,
+                    "reply_count": row.get::<_, i64>(3)?,
+                    "light_count": row.get::<_, i64>(4)?,
+                    "create_time": row.get::<_, i64>(5)?,
+                    "format_time": row.get::<_, Option<String>>(6)?,
+                    "fetch_date": row.get::<_, String>(7)?,
+                }))
+            })?.filter_map(|r| r.ok()).collect()
+        }
+        None => {
+            stmt.query_map(rusqlite::params![topic_id, limit as i64, offset as i64], |row| {
+                Ok(serde_json::json!({
+                    "tid": row.get::<_, i64>(0)?,
+                    "title": row.get::<_, String>(1)?,
+                    "author": row.get::<_, String>(2)?,
+                    "reply_count": row.get::<_, i64>(3)?,
+                    "light_count": row.get::<_, i64>(4)?,
+                    "create_time": row.get::<_, i64>(5)?,
+                    "format_time": row.get::<_, Option<String>>(6)?,
+                    "fetch_date": row.get::<_, String>(7)?,
+                }))
+            })?.filter_map(|r| r.ok()).collect()
+        }
+    };
+
+    Ok(rows)
+}
+
+/// Query monitor replies by topic_id, optionally filtered by date
+pub fn query_monitor_replies(
+    conn: &Connection,
+    topic_id: &str,
+    date: Option<&str>,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<serde_json::Value>> {
+    let sql = match date {
+        Some(_) => format!(
+            "SELECT pid, tid, username, content, light_count, create_time, format_time, fetch_date
+             FROM monitor_replies WHERE topic_id = ? AND fetch_date = ? ORDER BY light_count DESC LIMIT ? OFFSET ?"
+        ),
+        None => format!(
+            "SELECT pid, tid, username, content, light_count, create_time, format_time, fetch_date
+             FROM monitor_replies WHERE topic_id = ? ORDER BY light_count DESC LIMIT ? OFFSET ?"
+        ),
+    };
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows: Vec<serde_json::Value> = match date {
+        Some(d) => {
+            stmt.query_map(rusqlite::params![topic_id, d, limit as i64, offset as i64], |row| {
+                Ok(serde_json::json!({
+                    "pid": row.get::<_, i64>(0)?,
+                    "tid": row.get::<_, i64>(1)?,
+                    "username": row.get::<_, String>(2)?,
+                    "content": row.get::<_, String>(3)?,
+                    "light_count": row.get::<_, i64>(4)?,
+                    "create_time": row.get::<_, i64>(5)?,
+                    "format_time": row.get::<_, Option<String>>(6)?,
+                    "fetch_date": row.get::<_, String>(7)?,
+                }))
+            })?.filter_map(|r| r.ok()).collect()
+        }
+        None => {
+            stmt.query_map(rusqlite::params![topic_id, limit as i64, offset as i64], |row| {
+                Ok(serde_json::json!({
+                    "pid": row.get::<_, i64>(0)?,
+                    "tid": row.get::<_, i64>(1)?,
+                    "username": row.get::<_, String>(2)?,
+                    "content": row.get::<_, String>(3)?,
+                    "light_count": row.get::<_, i64>(4)?,
+                    "create_time": row.get::<_, i64>(5)?,
+                    "format_time": row.get::<_, Option<String>>(6)?,
+                    "fetch_date": row.get::<_, String>(7)?,
+                }))
+            })?.filter_map(|r| r.ok()).collect()
+        }
+    };
+
+    Ok(rows)
+}
+
+/// Count monitor posts for a topic_id, optionally filtered by date
+pub fn count_monitor_posts(conn: &Connection, topic_id: &str, date: Option<&str>) -> Result<i64> {
+    let tid = topic_id.to_string();
+    let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match date {
+        Some(_) => (
+            "SELECT COUNT(*) FROM monitor_posts WHERE topic_id = ?1 AND fetch_date = ?2",
+            vec![Box::new(tid), Box::new(date.unwrap().to_string())],
+        ),
+        None => (
+            "SELECT COUNT(*) FROM monitor_posts WHERE topic_id = ?1",
+            vec![Box::new(tid)],
+        ),
+    };
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let count: i64 = conn.query_row(sql, param_refs.as_slice(), |row| row.get(0))?;
+    Ok(count)
+}
+
+/// Count monitor replies for a topic_id, optionally filtered by date
+pub fn count_monitor_replies(conn: &Connection, topic_id: &str, date: Option<&str>) -> Result<i64> {
+    let tid = topic_id.to_string();
+    let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match date {
+        Some(_) => (
+            "SELECT COUNT(*) FROM monitor_replies WHERE topic_id = ?1 AND fetch_date = ?2",
+            vec![Box::new(tid), Box::new(date.unwrap().to_string())],
+        ),
+        None => (
+            "SELECT COUNT(*) FROM monitor_replies WHERE topic_id = ?1",
+            vec![Box::new(tid)],
+        ),
+    };
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let count: i64 = conn.query_row(sql, param_refs.as_slice(), |row| row.get(0))?;
+    Ok(count)
+}
+
+/// Get daily post counts for a topic over the last N days
+pub fn monitor_daily_post_counts(conn: &Connection, topic_id: &str, days: i64) -> Result<Vec<serde_json::Value>> {
+    let mut stmt = conn.prepare(
+        "SELECT fetch_date, COUNT(*) as cnt FROM monitor_posts
+         WHERE topic_id = ?1
+         GROUP BY fetch_date ORDER BY fetch_date DESC LIMIT ?2"
+    )?;
+    let rows: Vec<serde_json::Value> = stmt.query_map(rusqlite::params![topic_id, days], |row| {
+        Ok(serde_json::json!({
+            "date": row.get::<_, String>(0)?,
+            "count": row.get::<_, i64>(1)?,
+        }))
+    })?.filter_map(|r| r.ok()).collect();
+    Ok(rows)
+}
+
+/// Save a monitor snapshot (AI analysis result)
+pub fn save_monitor_snapshot(
+    conn: &Connection,
+    topic_id: &str,
+    snapshot_date: &str,
+    post_count: i64,
+    reply_count: i64,
+    sentiment_dist: &str,
+    top_keywords: &str,
+    ai_summary: &str,
+    ai_raw_json: &str,
+) -> Result<()> {
+    let now = chrono::Utc::now().timestamp();
+    conn.execute(
+        "INSERT OR REPLACE INTO monitor_snapshots
+         (topic_id, snapshot_date, post_count, reply_count, sentiment_dist, top_keywords, ai_summary, ai_raw_json, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        rusqlite::params![topic_id, snapshot_date, post_count, reply_count, sentiment_dist, top_keywords, ai_summary, ai_raw_json, now],
+    )?;
+    Ok(())
+}
+
+/// Get monitor snapshots for a topic over the last N days (for trend charts)
+pub fn get_monitor_snapshots(conn: &Connection, topic_id: &str, days: i64) -> Result<Vec<serde_json::Value>> {
+    let mut stmt = conn.prepare(
+        "SELECT topic_id, snapshot_date, post_count, reply_count, sentiment_dist, top_keywords, ai_summary, ai_raw_json, created_at
+         FROM monitor_snapshots WHERE topic_id = ?1 ORDER BY snapshot_date DESC LIMIT ?2"
+    )?;
+    let rows: Vec<serde_json::Value> = stmt.query_map(rusqlite::params![topic_id, days], |row| {
+        Ok(serde_json::json!({
+            "topic_id": row.get::<_, String>(0)?,
+            "snapshot_date": row.get::<_, String>(1)?,
+            "post_count": row.get::<_, i64>(2)?,
+            "reply_count": row.get::<_, i64>(3)?,
+            "sentiment_dist": row.get::<_, Option<String>>(4)?,
+            "top_keywords": row.get::<_, Option<String>>(5)?,
+            "ai_summary": row.get::<_, Option<String>>(6)?,
+            "ai_raw_json": row.get::<_, Option<String>>(7)?,
+            "created_at": row.get::<_, i64>(8)?,
+        }))
+    })?.filter_map(|r| r.ok()).collect();
+    Ok(rows)
+}
+
+/// Get all known TIDs for a topic (for dedup — skip already-fetched posts)
+pub fn get_monitor_known_tids(conn: &Connection, topic_id: &str) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT tid FROM monitor_posts WHERE topic_id = ?1"
+    )?;
+    let rows: Vec<i64> = stmt
+        .query_map(rusqlite::params![topic_id], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+/// Get all distinct fetch_dates already covered for a topic (for dedup)
+pub fn get_monitor_covered_dates(conn: &Connection, topic_id: &str) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT fetch_date FROM monitor_posts WHERE topic_id = ?1 ORDER BY fetch_date DESC"
+    )?;
+    let rows: Vec<String> = stmt
+        .query_map(rusqlite::params![topic_id], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+/// Get all distinct topic_ids in monitor data (for the dropdown)
+pub fn get_monitor_topics(conn: &Connection) -> Result<Vec<serde_json::Value>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT topic_id FROM monitor_posts ORDER BY topic_id"
+    )?;
+    let rows: Vec<serde_json::Value> = stmt.query_map([], |row| {
+        Ok(serde_json::json!({
+            "topic_id": row.get::<_, i64>(0)?,
+        }))
+    })?.filter_map(|r| r.ok()).collect();
+    Ok(rows)
 }
 
 #[cfg(test)]

@@ -174,6 +174,27 @@ pub fn repair_truncated_json(s: &str) -> String {
     result
 }
 
+/// Safe string slicing — takes the first `max_chars` characters (not bytes).
+/// Returns the original string if it's shorter. Never panics on UTF-8.
+#[allow(dead_code)]
+pub fn safe_take_chars(s: &str, max_chars: usize) -> &str {
+    match s.char_indices().nth(max_chars) {
+        Some((pos, _)) => &s[..pos],
+        None => s,
+    }
+}
+
+/// Safe byte-range slice — ensures both start and end are on UTF-8 char boundaries.
+/// Returns the original string slice clamped to valid boundaries.
+pub fn safe_slice(s: &str, start: usize, end: usize) -> &str {
+    let start = s.ceil_char_boundary(start.min(s.len()));
+    let end = s.ceil_char_boundary(end.min(s.len()));
+    if start >= end {
+        return "";
+    }
+    &s[start..end]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

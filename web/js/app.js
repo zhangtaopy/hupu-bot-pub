@@ -9,6 +9,7 @@ import { setupFetchSection } from './components/FetchSection.js';
 import { setupRepliesTab } from './components/RepliesTab.js';
 import { setupPostsTab } from './components/PostsTab.js';
 import { setupQaTab } from './components/QaTab.js';
+import { setupMonitorTab } from './components/MonitorTab.js';
 import * as api from './utils/api.js';
 import { fmtTokens, renderMarkdown } from './utils/helpers.js';
 
@@ -27,6 +28,7 @@ createApp({
     const replies = setupRepliesTab(store, charts, { api });
     const posts = setupPostsTab(store, charts);
     const qa = setupQaTab(store);
+    const monitor = setupMonitorTab(store);
 
     // ── Watch darkMode → re-render charts ──
     watch(store.darkMode, async () => {
@@ -39,6 +41,12 @@ createApp({
       if (store.postsData.value.length) {
         charts.renderPostTopicChart();
       }
+      if (monitor.monitorStats.value) {
+        monitor.renderSentimentChart();
+        monitor.renderDailyChart();
+        monitor.renderBrandChart();
+        monitor.renderModelChart();
+      }
     });
 
     // ── Watch activeTab → render charts when switching ──
@@ -50,6 +58,11 @@ createApp({
         charts.renderDetailedCharts();
       } else if (newTab === 'posts' && store.postsData.value.length) {
         charts.renderPostTopicChart();
+      } else if (newTab === 'monitor' && monitor.monitorStats.value) {
+        monitor.renderSentimentChart();
+        monitor.renderDailyChart();
+        monitor.renderBrandChart();
+        monitor.renderModelChart();
       }
     });
 
@@ -169,6 +182,7 @@ createApp({
       ...replies,
       ...posts,
       ...qa,
+      ...monitor,
       ...fetchSection,
       saveConfig, skipAiKeySetup, checkConfigStatus,
       fetchEuids, exportImage,

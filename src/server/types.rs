@@ -210,3 +210,63 @@ pub struct HistoryEntry {
     pub answer: String,
 }
 
+// ── Monitor (舆论监控) types ──
+
+#[derive(Deserialize)]
+pub struct MonitorFetchQuery {
+    pub topic_id: String,
+    /// Number of days to fetch (1 = today, 7 = past week).
+    #[serde(default = "default_monitor_fetch_days")]
+    pub days: u32,
+    #[serde(default = "default_monitor_replies_per_post")]
+    pub replies_per_post: usize,
+    #[serde(default)]
+    pub cookie: Option<String>,
+}
+
+fn default_monitor_replies_per_post() -> usize {
+    10
+}
+
+#[derive(Deserialize)]
+pub struct MonitorTopicQuery {
+    pub topic_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct MonitorPostsQuery {
+    pub topic_id: String,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default = "default_monitor_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+#[derive(Deserialize)]
+pub struct MonitorAnalyzeQuery {
+    pub topic_id: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct MonitorStatsQuery {
+    pub topic_id: String,
+    #[serde(default = "default_monitor_days")]
+    pub days: i64,
+}
+
+fn default_monitor_limit() -> usize {
+    50
+}
+fn default_monitor_fetch_days() -> u32 {
+    1
+}
+fn default_monitor_days() -> i64 {
+    7
+}
+

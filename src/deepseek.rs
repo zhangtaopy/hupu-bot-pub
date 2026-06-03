@@ -900,11 +900,21 @@ async fn call_llm(
     Ok(DeepSeekResult { value, raw_content: content })
 }
 
-async fn call_llm_text(
+pub async fn call_llm_text(
     client: &reqwest::Client,
     provider: &AiProvider,
     system_prompt: &str,
     user_prompt: &str,
+) -> Result<(String, TokenUsage)> {
+    call_llm_text_with_tokens(client, provider, system_prompt, user_prompt, 4096).await
+}
+
+pub async fn call_llm_text_with_tokens(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    system_prompt: &str,
+    user_prompt: &str,
+    max_tokens: u32,
 ) -> Result<(String, TokenUsage)> {
     #[derive(Serialize)]
     struct TextRequest {
@@ -919,7 +929,7 @@ async fn call_llm_text(
             Message { role: "system".to_string(), content: system_prompt.to_string() },
             Message { role: "user".to_string(), content: user_prompt.to_string() },
         ],
-        max_tokens: 4096,
+        max_tokens,
     };
 
     let resp = client

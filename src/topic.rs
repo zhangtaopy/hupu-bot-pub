@@ -85,6 +85,8 @@ struct Thread {
     tid: String,
     title: String,
     content: String,
+    #[serde(default)]
+    create_time: Option<String>,
     lights: Option<i32>,
     replies: Option<i32>,
     author: Option<Author>,
@@ -112,6 +114,32 @@ struct ReplyData {
 static POST_LINK_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"<a[^>]*href="/(\d{9})\.html"[^>]*class="p-title"[^>]*>([^<]+)</a>"#).unwrap()
 });
+static POST_LINK_REGEX_FALLBACK: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"<a[^>]*href="/(\d{9})\.html"[^>]*>([^<]+)</a>"#).unwrap()
+});
+
+// 时间格式: 2024-12-20, 2024-12-20 14:30, 12-20 14:30, 12-20
+static POST_TIME_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}\s+\d{2}:\d{2})|(\d{1,2}小时前)|(\d{1,2}分钟前)|(昨天\s*\d{0,2}:\d{0,2})"#).unwrap()
+});
+
+// 作者: <a ... class="p-author"> or <span class="author"> or <a class="user-name">
+static POST_AUTHOR_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"class="(?:p-author|author|user-name|username)"[^>]*>([^<]+)</(?:a|span)>"#).unwrap()
+});
+
+// 回复数: "42回复" or "42回" or "82 / 23760" (replies / views)
+static POST_REPLY_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(\d+)\s*(?:回复|回)"#).unwrap()
+});
+static POST_REPLY_SLASH_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(\d+)\s*/\s*\d+"#).unwrap()
+});
+
+// 亮了数: "100亮" or "100亮了"
+static POST_LIGHT_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(\d+)\s*(?:亮|亮了)"#).unwrap()
+});
 
 /// 获取指定 topic 的帖子列表
 pub async fn fetch_topic_posts(
@@ -123,7 +151,7 @@ pub async fn fetch_topic_posts(
     let url = if page == 1 {
         format!("https://bbs.hupu.com/{}", topic_id)
     } else {
-        format!("https://bbs.hupu.com/topic/{}-{}", topic_id, page)
+        format!("https://bbs.hupu.com/{}-{}", topic_id, page)
     };
 
     let text = client
@@ -138,35 +166,129 @@ pub async fn fetch_topic_posts(
     Ok(posts)
 }
 
-/// 解析帖子列表（从 HTML 元素中提取）
+/// 解析帖子列表（从 HTML 元素中提取标题+TID+时间+作者+回复数+亮了数）
 fn parse_post_list(html: &str, limit: usize) -> Vec<Post> {
     let mut posts = Vec::new();
-    let mut seen = std::collections::HashSet::new();
 
-    for cap in POST_LINK_REGEX.captures_iter(html) {
+    // Try primary regex first (class="p-title"), fallback to generic if nothing found
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut link_positions: Vec<(usize, usize, String, String)> = Vec::new();
+
+    for regex in [&POST_LINK_REGEX as &Regex, &POST_LINK_REGEX_FALLBACK] {
+        for cap in regex.captures_iter(html) {
+            let m = cap.get(0).unwrap();
+            let tid = cap[1].to_string();
+            let title = html_escape::decode_html_entities(&cap[2]).trim().to_string();
+            if !title.is_empty() && !seen.contains(&tid) {
+                seen.insert(tid.clone());
+                link_positions.push((m.start(), m.end(), tid, title));
+            }
+        }
+        if !link_positions.is_empty() {
+            break; // primary regex matched, skip fallback
+        }
+    }
+
+    // For each post link, extract surrounding metadata (look within ~800 chars after the link)
+    for (_start, end, tid, title) in link_positions {
         if posts.len() >= limit {
             break;
         }
 
-        let tid = cap[1].to_string();
-        let title = html_escape::decode_html_entities(&cap[2]).trim().to_string();
+        let context = crate::utils::safe_slice(html, end, end + 800);
 
-        if title.is_empty() || seen.contains(&tid) {
-            continue;
-        }
+        // Extract time
+        let create_time = POST_TIME_REGEX
+            .captures(context)
+            .map(|c| c[0].to_string());
 
-        seen.insert(tid.clone());
+        // Extract author
+        let author = POST_AUTHOR_REGEX
+            .captures(context)
+            .map(|c| c[1].to_string());
+
+        // Extract reply count — try "42回复" first, then "82 / 23760" format
+        let reply_count = POST_REPLY_REGEX
+            .captures(context)
+            .and_then(|c| c[1].parse::<i32>().ok())
+            .or_else(|| {
+                POST_REPLY_SLASH_REGEX
+                    .captures(context)
+                    .and_then(|c| c[1].parse::<i32>().ok())
+            });
+
+        // Extract light count
+        let light_count = POST_LIGHT_REGEX
+            .captures(context)
+            .and_then(|c| c[1].parse::<i32>().ok());
+
         posts.push(Post {
             tid,
             title,
-            author: None,
-            reply_count: None,
-            light_count: None,
-            create_time: None,
+            author,
+            reply_count,
+            light_count,
+            create_time,
         });
     }
 
     posts
+}
+
+/// 一次性获取帖子详情 + 热门回复（合并请求，避免重复 HTTP 调用）
+pub async fn fetch_post_combined(client: &HupuClient, tid: &str, reply_limit: usize) -> Result<(PostDetail, Vec<PostReply>)> {
+    let data = fetch_post_data(client, tid).await?;
+
+    if let Some(err) = &data.props.page_props.detail_error_info {
+        if err.code != 200 {
+            anyhow::bail!("帖子访问失败: {} (code: {})", err.message, err.code);
+        }
+    }
+
+    let detail_info = data
+        .props
+        .page_props
+        .detail
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("帖子不存在或无法访问"))?;
+
+    let thread = detail_info.thread.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("帖子不存在或已被删除"))?;
+
+    let author_name = thread
+        .author
+        .as_ref()
+        .and_then(|a| a.puname.as_ref())
+        .cloned()
+        .unwrap_or_default();
+
+    let create_time = thread.create_time.clone(); // "2025-06-02T20:30:00.000+08:00" or similar
+
+    let detail = PostDetail {
+        tid: thread.tid.clone(),
+        title: thread.title.clone(),
+        author: author_name,
+        content: strip_html(&decode_json_escapes(&thread.content)),
+        create_time,
+        reply_count: thread.replies,
+        light_count: thread.lights,
+    };
+
+    let replies: Vec<PostReply> = detail_info
+        .lights
+        .as_ref()
+        .map(|lights| {
+            lights.iter().take(reply_limit).map(|r| PostReply {
+                pid: r.pid.clone(),
+                username: r.author.as_ref().and_then(|a| a.puname.clone()).unwrap_or_default(),
+                content: strip_html(&decode_json_escapes(&r.content)),
+                light_count: r.all_light_count.unwrap_or(0),
+                create_time: r.created_at_format.clone(),
+            }).collect()
+        })
+        .unwrap_or_default();
+
+    Ok((detail, replies))
 }
 
 /// 获取帖子详情和热门回复
@@ -395,6 +517,53 @@ pub fn format_post_simple(posts: &[Post]) {
 pub fn format_post_json(posts: &[Post]) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(posts)?);
     Ok(())
+}
+
+/// Try to convert a parsed time string to days-old. Returns None if unparseable.
+/// Handles: "2024-12-20", "12-20 14:30", "3小时前", "昨天", etc.
+#[allow(dead_code)]
+pub fn time_str_days_old(s: &str) -> Option<i64> {
+    let now = chrono::Utc::now();
+
+    // Absolute date: 2024-12-20 or 2024-12-20 14:30
+    if let Some(date_part) = s.split_whitespace().next() {
+        if date_part.len() >= 10 && date_part.chars().filter(|c| *c == '-').count() == 2 {
+            if let Ok(d) = chrono::NaiveDate::parse_from_str(&date_part[..10], "%Y-%m-%d") {
+                let dt = d.and_hms_opt(0, 0, 0).unwrap();
+                let days = (now.naive_utc() - dt).num_hours() / 24;
+                return Some(days);
+            }
+        }
+    }
+
+    // MM-DD HH:MM → assume current year
+    if s.len() >= 5 && &s[2..3] == "-" {
+        let today = now.date_naive();
+        let year = today.format("%Y").to_string();
+        let full = format!("{}-{}", year, &s[..5]);
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&full, "%Y-%m-%d") {
+            let dt = d.and_hms_opt(0, 0, 0).unwrap();
+            let days = (now.naive_utc() - dt).num_hours() / 24;
+            return Some(days);
+        }
+    }
+
+    // "N小时前"
+    if let Some(hours) = s.strip_suffix("小时前").and_then(|h| h.parse::<i64>().ok()) {
+        return Some(if hours < 24 { 0 } else { hours / 24 });
+    }
+
+    // "N分钟前"
+    if s.contains("分钟前") {
+        return Some(0);
+    }
+
+    // "昨天"
+    if s.starts_with("昨天") {
+        return Some(1);
+    }
+
+    None
 }
 
 fn truncate(s: &str, max_len: usize) -> String {
