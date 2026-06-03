@@ -118,29 +118,6 @@ static POST_LINK_REGEX_FALLBACK: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"<a[^>]*href="/(\d{9})\.html"[^>]*>([^<]+)</a>"#).unwrap()
 });
 
-// 时间格式: 2024-12-20, 2024-12-20 14:30, 12-20 14:30, 12-20
-static POST_TIME_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}\s+\d{2}:\d{2})|(\d{1,2}小时前)|(\d{1,2}分钟前)|(昨天\s*\d{0,2}:\d{0,2})"#).unwrap()
-});
-
-// 作者: <a ... class="p-author"> or <span class="author"> or <a class="user-name">
-static POST_AUTHOR_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"class="(?:p-author|author|user-name|username)"[^>]*>([^<]+)</(?:a|span)>"#).unwrap()
-});
-
-// 回复数: "42回复" or "42回" or "82 / 23760" (replies / views)
-static POST_REPLY_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(\d+)\s*(?:回复|回)"#).unwrap()
-});
-static POST_REPLY_SLASH_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(\d+)\s*/\s*\d+"#).unwrap()
-});
-
-// 亮了数: "100亮" or "100亮了"
-static POST_LIGHT_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(\d+)\s*(?:亮|亮了)"#).unwrap()
-});
-
 /// 获取指定 topic 的帖子列表
 pub async fn fetch_topic_posts(
     client: &HupuClient,
@@ -166,70 +143,36 @@ pub async fn fetch_topic_posts(
     Ok(posts)
 }
 
-/// 解析帖子列表（从 HTML 元素中提取标题+TID+时间+作者+回复数+亮了数）
+/// 解析帖子列表（从 HTML 中提取 TID + 标题；其他字段由 detail 接口获取）
 fn parse_post_list(html: &str, limit: usize) -> Vec<Post> {
-    let mut posts = Vec::new();
-
-    // Try primary regex first (class="p-title"), fallback to generic if nothing found
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut link_positions: Vec<(usize, usize, String, String)> = Vec::new();
+    let mut posts = Vec::new();
 
     for regex in [&POST_LINK_REGEX as &Regex, &POST_LINK_REGEX_FALLBACK] {
         for cap in regex.captures_iter(html) {
-            let m = cap.get(0).unwrap();
+            if posts.len() >= limit {
+                break;
+            }
             let tid = cap[1].to_string();
+            if seen.contains(&tid) {
+                continue;
+            }
+            seen.insert(tid.clone());
             let title = html_escape::decode_html_entities(&cap[2]).trim().to_string();
-            if !title.is_empty() && !seen.contains(&tid) {
-                seen.insert(tid.clone());
-                link_positions.push((m.start(), m.end(), tid, title));
+            if !title.is_empty() {
+                posts.push(Post {
+                    tid,
+                    title,
+                    author: None,
+                    reply_count: None,
+                    light_count: None,
+                    create_time: None,
+                });
             }
         }
-        if !link_positions.is_empty() {
-            break; // primary regex matched, skip fallback
-        }
-    }
-
-    // For each post link, extract surrounding metadata (look within ~800 chars after the link)
-    for (_start, end, tid, title) in link_positions {
-        if posts.len() >= limit {
+        if !posts.is_empty() {
             break;
         }
-
-        let context = crate::utils::safe_slice(html, end, end + 800);
-
-        // Extract time
-        let create_time = POST_TIME_REGEX
-            .captures(context)
-            .map(|c| c[0].to_string());
-
-        // Extract author
-        let author = POST_AUTHOR_REGEX
-            .captures(context)
-            .map(|c| c[1].to_string());
-
-        // Extract reply count — try "42回复" first, then "82 / 23760" format
-        let reply_count = POST_REPLY_REGEX
-            .captures(context)
-            .and_then(|c| c[1].parse::<i32>().ok())
-            .or_else(|| {
-                POST_REPLY_SLASH_REGEX
-                    .captures(context)
-                    .and_then(|c| c[1].parse::<i32>().ok())
-            });
-
-        // Extract light count
-        let light_count = POST_LIGHT_REGEX
-            .captures(context)
-            .and_then(|c| c[1].parse::<i32>().ok());
-
-        posts.push(Post {
-            tid,
-            title,
-            author,
-            reply_count,
-            light_count,
-            create_time,
-        });
     }
 
     posts

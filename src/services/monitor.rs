@@ -131,11 +131,8 @@ async fn fetch_post_details(
                     (ts, detail.reply_count.unwrap_or(0), detail.light_count.unwrap_or(0), detail.author)
                 }
                 Err(_) => {
-                    let ts = post.create_time.as_deref()
-                        .and_then(|t| crate::db::parse_post_time_to_ts(t))
-                        .unwrap_or_else(|| chrono::Utc::now().timestamp());
-                    (ts, post.reply_count.unwrap_or(0), post.light_count.unwrap_or(0),
-                     post.author.clone().unwrap_or_default())
+                    // Detail unavailable — use defaults
+                    (chrono::Utc::now().timestamp(), 0, 0, String::new())
                 }
             };
 
