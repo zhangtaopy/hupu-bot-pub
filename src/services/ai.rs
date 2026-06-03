@@ -67,22 +67,9 @@ pub async fn run_ai_analysis_background(state: Arc<AppState>, euid: String, user
         Some(posts_context)
     };
 
-    let (provider, max_concurrency) = if let Some(p) = user_provider {
-        let mc = crate::config::try_get().map(|c| c.max_concurrency.max(1)).unwrap_or(3);
-        (p, mc)
-    } else {
-        let cfg = match crate::config::try_get() {
-            Some(cfg) => cfg,
-            None => {
-                set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
-                return;
-            }
-        };
-        if cfg.api_key.is_empty() {
-            set_progress(&state, "error", 0, 0, true, Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into()));
-            return;
-        }
-        (cfg.ai_provider(), cfg.max_concurrency.max(1))
+    let (provider, max_concurrency) = match crate::resolver::resolve_ai_provider_with_concurrency(user_provider) {
+        Ok(p) => p,
+        Err(e) => { set_progress(&state, "error", 0, 0, true, Some(e.into())); return; }
     };
 
     let mut sorted = all_replies.clone();
@@ -276,22 +263,9 @@ pub async fn run_ai_post_analysis_background(state: Arc<AppState>, euid: String,
         }
     };
 
-    let (provider, max_concurrency) = if let Some(p) = user_provider {
-        let mc = crate::config::try_get().map(|c| c.max_concurrency.max(1)).unwrap_or(3);
-        (p, mc)
-    } else {
-        let cfg = match crate::config::try_get() {
-            Some(cfg) => cfg,
-            None => {
-                set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie".into()));
-                return;
-            }
-        };
-        if cfg.api_key.is_empty() {
-            set_progress(&state, "error", 0, 0, true, Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into()));
-            return;
-        }
-        (cfg.ai_provider(), cfg.max_concurrency.max(1))
+    let (provider, max_concurrency) = match crate::resolver::resolve_ai_provider_with_concurrency(user_provider) {
+        Ok(p) => p,
+        Err(e) => { set_progress(&state, "error", 0, 0, true, Some(e.into())); return; }
     };
 
     let mut sorted = all_posts.clone();

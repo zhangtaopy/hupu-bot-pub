@@ -8,6 +8,7 @@ mod deepseek;
 mod mentions;
 mod posts;
 mod replies;
+mod resolver;
 mod search;
 mod server;
 mod services;

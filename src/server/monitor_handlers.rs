@@ -31,8 +31,7 @@ pub async fn start_monitor_fetch(
         }
     }
 
-    let has_cookie = params.cookie.as_ref().filter(|c| !c.is_empty()).is_some()
-        || crate::config::try_get().map(|c| !c.cookie.is_empty()).unwrap_or(false);
+    let has_cookie = crate::resolver::has_cookie(params.cookie.as_deref());
     if !has_cookie {
         return Ok(Json(serde_json::json!({
             "status": "error",

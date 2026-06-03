@@ -23,20 +23,10 @@ pub async fn run_fetch_posts_background(state: Arc<AppState>, euid: String, max_
     let total_hint = if max_pages > 0 { max_pages as usize } else { 0 };
     set_progress(&state, "准备中", 0, total_hint, false, None);
 
-    let cookie_str = match cookie_override
-        .filter(|c| !c.is_empty())
-        .or_else(|| crate::config::try_get().and_then(|c| if !c.cookie.is_empty() { Some(c.cookie) } else { None }))
-    {
-        Some(c) => c,
-        None => {
-            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie（在 config.json 中或页面上填写）".into()));
-            return;
-        }
-    };
-    let client = match crate::client::HupuClient::new(&cookie_str) {
+    let client = match crate::resolver::create_hupu_client(cookie_override.as_deref()) {
         Ok(c) => c,
         Err(e) => {
-            set_progress(&state, "error", 0, 0, true, Some(format!("创建客户端失败: {}", e)));
+            set_progress(&state, "error", 0, 0, true, Some(e));
             return;
         }
     };
@@ -137,20 +127,10 @@ pub async fn run_fetch_replies_background(
     let total_hint = if max_pages > 0 { max_pages as usize } else { 0 };
     set_progress(&state, "准备中", 0, total_hint, false, None);
 
-    let cookie_str = match cookie_override
-        .filter(|c| !c.is_empty())
-        .or_else(|| crate::config::try_get().and_then(|c| if !c.cookie.is_empty() { Some(c.cookie) } else { None }))
-    {
-        Some(c) => c,
-        None => {
-            set_progress(&state, "error", 0, 0, true, Some("请先配置 Cookie（在 config.json 中或页面上填写）".into()));
-            return;
-        }
-    };
-    let client = match crate::client::HupuClient::new(&cookie_str) {
+    let client = match crate::resolver::create_hupu_client(cookie_override.as_deref()) {
         Ok(c) => c,
         Err(e) => {
-            set_progress(&state, "error", 0, 0, true, Some(format!("创建客户端失败: {}", e)));
+            set_progress(&state, "error", 0, 0, true, Some(e));
             return;
         }
     };

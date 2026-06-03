@@ -435,36 +435,19 @@ pub async fn start_ai_analysis(
         }
     }
 
-    let user_provider = match (&params.api_key, &params.provider) {
-        (Some(key), Some(prov)) if !key.is_empty() => {
-            Some(crate::deepseek::AiProvider::from_user_input(prov, key))
-        }
-        _ => None,
+    let provider = match (&params.api_key, &params.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() =>
+            crate::deepseek::AiProvider::from_user_input(prov, key),
+        _ => match crate::resolver::resolve_ai_provider(None) {
+            Ok(p) => p,
+            Err(e) => return Ok(Json(serde_json::json!({"status": "error", "error": e}))),
+        },
     };
-
-    // If no user-provided key, fall back to config check
-    if user_provider.is_none() {
-        let cfg = match crate::config::try_get() {
-            Some(cfg) => cfg,
-            None => {
-                return Ok(Json(serde_json::json!({
-                    "status": "error",
-                    "error": "请先配置 Cookie",
-                })));
-            }
-        };
-        if cfg.api_key.is_empty() {
-            return Ok(Json(serde_json::json!({
-                "status": "error",
-                "error": "未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）",
-            })));
-        }
-    }
 
     let state_clone = state.clone();
     let euid = params.euid.clone();
     tokio::spawn(async move {
-        crate::services::ai::run_ai_analysis_background(state_clone, euid, user_provider).await;
+        crate::services::ai::run_ai_analysis_background(state_clone, euid, Some(provider)).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -563,36 +546,19 @@ pub async fn start_ai_post_analysis(
         }
     }
 
-    let user_provider = match (&params.api_key, &params.provider) {
-        (Some(key), Some(prov)) if !key.is_empty() => {
-            Some(crate::deepseek::AiProvider::from_user_input(prov, key))
-        }
-        _ => None,
+    let provider = match (&params.api_key, &params.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() =>
+            crate::deepseek::AiProvider::from_user_input(prov, key),
+        _ => match crate::resolver::resolve_ai_provider(None) {
+            Ok(p) => p,
+            Err(e) => return Ok(Json(serde_json::json!({"status": "error", "error": e}))),
+        },
     };
-
-    // If no user-provided key, fall back to config check
-    if user_provider.is_none() {
-        let cfg = match crate::config::try_get() {
-            Some(cfg) => cfg,
-            None => {
-                return Ok(Json(serde_json::json!({
-                    "status": "error",
-                    "error": "请先配置 Cookie",
-                })));
-            }
-        };
-        if cfg.api_key.is_empty() {
-            return Ok(Json(serde_json::json!({
-                "status": "error",
-                "error": "未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）",
-            })));
-        }
-    }
 
     let state_clone = state.clone();
     let euid = params.euid.clone();
     tokio::spawn(async move {
-        crate::services::ai::run_ai_post_analysis_background(state_clone, euid, user_provider).await;
+        crate::services::ai::run_ai_post_analysis_background(state_clone, euid, Some(provider)).await;
     });
 
     Ok(Json(serde_json::json!({
