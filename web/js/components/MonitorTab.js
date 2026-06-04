@@ -41,6 +41,11 @@ export function setupMonitorTab(store) {
     return monitorStats.value.today;
   });
 
+  const rangeStats = computed(() => {
+    if (!monitorStats.value || !monitorStats.value.range) return { posts: 0, replies: 0 };
+    return monitorStats.value.range;
+  });
+
   const latestSnapshot = computed(() => {
     if (!monitorStats.value || !monitorStats.value.snapshots || !monitorStats.value.snapshots.length)
       return null;
@@ -180,7 +185,11 @@ export function setupMonitorTab(store) {
 
   async function loadPosts() {
     try {
-      const res = await fetch(`/api/monitor/posts?topic_id=${topicId.value.trim()}&limit=20`);
+      let url = `/api/monitor/posts?topic_id=${topicId.value.trim()}&limit=20`;
+      if (fetchDays.value === 1) {
+        url += `&date=${todayStr()}`;
+      }
+      const res = await fetch(url);
       const data = await res.json();
       monitorPosts.value = data.posts || [];
     } catch { /* ignore */ }
@@ -188,7 +197,11 @@ export function setupMonitorTab(store) {
 
   async function loadReplies() {
     try {
-      const res = await fetch(`/api/monitor/replies?topic_id=${topicId.value.trim()}&limit=20`);
+      let url = `/api/monitor/replies?topic_id=${topicId.value.trim()}&limit=20`;
+      if (fetchDays.value === 1) {
+        url += `&date=${todayStr()}`;
+      }
+      const res = await fetch(url);
       const data = await res.json();
       monitorReplies.value = data.replies || [];
     } catch { /* ignore */ }
@@ -576,6 +589,10 @@ export function setupMonitorTab(store) {
     if (modelChart) modelChart.destroy();
   });
 
+  function todayStr() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
   // Format helpers
   function fmtTime(ts) {
     if (!ts) return '';
@@ -592,9 +609,9 @@ export function setupMonitorTab(store) {
     topicId, fetchDays, monitorLoading, monitorError, monitorStats, monitorPosts, monitorReplies,
     coveredDates, fetchProgress, analyzeProgress,
     quickTopics,
-    todayStats, latestSnapshot, sentimentData, aiJson, brandData, modelData, keywordsData, dailyCounts,
+    todayStats, rangeStats, latestSnapshot, sentimentData, aiJson, brandData, modelData, keywordsData, dailyCounts,
     loadExistingData, monitorFetchData, loadStats, startAnalyze, pollFetchProgress, pollAnalyzeProgress,
     renderSentimentChart, renderDailyChart,
-    fmtTime, truncate,
+    todayStr, fmtTime, truncate,
   };
 }

@@ -1266,12 +1266,12 @@
     <!-- Stats cards -->
     <div v-if="monitorStats" class="grid grid-cols-2 md:grid-cols-5 gap-4">
       <div class="stat-card accent-indigo bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-4 text-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-        <div class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{{ todayStats.posts }}</div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">今日帖子</div>
+        <div class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{{ fetchDays === 1 ? todayStats.posts : rangeStats.posts }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">{{ fetchDays === 1 ? '今日帖子' : fetchDays + '日帖子' }}</div>
       </div>
       <div class="stat-card accent-indigo bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-4 text-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
-        <div class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{{ todayStats.replies }}</div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">今日热评</div>
+        <div class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{{ fetchDays === 1 ? todayStats.replies : rangeStats.replies }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 font-medium">{{ fetchDays === 1 ? '今日热评' : fetchDays + '日热评' }}</div>
       </div>
       <div class="stat-card accent-emerald bg-white/80 dark:bg-dark-surface backdrop-blur-sm rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.45)] border border-gray-100 dark:border-gray-800 p-4 text-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-card">
         <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ sentimentData ? sentimentData.positive || 0 : '-' }}</div>

@@ -101,11 +101,16 @@ pub async fn get_monitor_stats(
     let today_posts = crate::db::count_monitor_posts(&conn, topic_id, Some(&today)).unwrap_or(0);
     let today_replies = crate::db::count_monitor_replies(&conn, topic_id, Some(&today)).unwrap_or(0);
     let daily_counts = crate::db::monitor_daily_post_counts(&conn, topic_id, params.days).unwrap_or_default();
+    let daily_reply_counts = crate::db::monitor_daily_reply_counts(&conn, topic_id, params.days).unwrap_or_default();
+    // Sum daily counts to get range totals
+    let range_posts: i64 = daily_counts.iter().filter_map(|v| v["count"].as_i64()).sum();
+    let range_replies: i64 = daily_reply_counts.iter().filter_map(|v| v["count"].as_i64()).sum();
     let snapshots = crate::db::get_monitor_snapshots(&conn, topic_id, params.days).unwrap_or_default();
     let topics = crate::db::get_monitor_topics(&conn).unwrap_or_default();
     let covered_dates = crate::db::get_monitor_covered_dates(&conn, topic_id).unwrap_or_default();
     Ok(Json(serde_json::json!({
         "topic_id": topic_id, "today": { "posts": today_posts, "replies": today_replies },
+        "range": { "posts": range_posts, "replies": range_replies },
         "daily_counts": daily_counts, "snapshots": snapshots,
         "known_topics": topics, "covered_dates": covered_dates,
     })))

@@ -112,7 +112,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         -- 分区舆论监控：帖子
         CREATE TABLE IF NOT EXISTS monitor_posts (
             tid            INTEGER PRIMARY KEY,
-            topic_id       INTEGER NOT NULL,
+            topic_id       TEXT NOT NULL,
             title          TEXT NOT NULL,
             author         TEXT NOT NULL DEFAULT '',
             reply_count    INTEGER NOT NULL DEFAULT 0,
@@ -130,7 +130,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS monitor_replies (
             pid            INTEGER PRIMARY KEY,
             tid            INTEGER NOT NULL,
-            topic_id       INTEGER NOT NULL,
+            topic_id       TEXT NOT NULL,
             username       TEXT NOT NULL DEFAULT '',
             content        TEXT NOT NULL,
             light_count    INTEGER NOT NULL DEFAULT 0,
@@ -146,7 +146,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
 
         -- 分区舆论监控：每日快照（AI分析结果缓存）
         CREATE TABLE IF NOT EXISTS monitor_snapshots (
-            topic_id       INTEGER NOT NULL,
+            topic_id       TEXT NOT NULL,
             snapshot_date  TEXT NOT NULL,
             post_count     INTEGER NOT NULL DEFAULT 0,
             reply_count    INTEGER NOT NULL DEFAULT 0,
@@ -844,7 +844,7 @@ pub fn upsert_monitor_posts(conn: &Connection, topic_id: &str, posts: &[Post]) -
             .unwrap_or(now); // fallback to current time
 
         tx.execute(
-            "INSERT OR REPLACE INTO monitor_posts (
+            "INSERT OR IGNORE INTO monitor_posts (
                 tid, topic_id, title, author, reply_count, light_count,
                 create_time, format_time, fetched_at, fetch_date
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -911,7 +911,7 @@ pub fn upsert_monitor_replies(conn: &Connection, topic_id: &str, tid: i64, repli
 
     for r in replies {
         tx.execute(
-            "INSERT OR REPLACE INTO monitor_replies (
+            "INSERT OR IGNORE INTO monitor_replies (
                 pid, tid, topic_id, username, content, light_count,
                 create_time, format_time, fetched_at, fetch_date
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -1094,6 +1094,22 @@ pub fn monitor_daily_post_counts(conn: &Connection, topic_id: &str, days: i64) -
     Ok(rows)
 }
 
+/// Get daily reply counts for a topic over the last N days
+pub fn monitor_daily_reply_counts(conn: &Connection, topic_id: &str, days: i64) -> Result<Vec<serde_json::Value>> {
+    let mut stmt = conn.prepare(
+        "SELECT fetch_date, COUNT(*) as cnt FROM monitor_replies
+         WHERE topic_id = ?1
+         GROUP BY fetch_date ORDER BY fetch_date DESC LIMIT ?2"
+    )?;
+    let rows: Vec<serde_json::Value> = stmt.query_map(rusqlite::params![topic_id, days], |row| {
+        Ok(serde_json::json!({
+            "date": row.get::<_, String>(0)?,
+            "count": row.get::<_, i64>(1)?,
+        }))
+    })?.filter_map(|r| r.ok()).collect();
+    Ok(rows)
+}
+
 /// Save a monitor snapshot (AI analysis result)
 pub fn save_monitor_snapshot(
     conn: &Connection,
@@ -1169,7 +1185,7 @@ pub fn get_monitor_topics(conn: &Connection) -> Result<Vec<serde_json::Value>> {
     )?;
     let rows: Vec<serde_json::Value> = stmt.query_map([], |row| {
         Ok(serde_json::json!({
-            "topic_id": row.get::<_, i64>(0)?,
+            "topic_id": row.get::<_, String>(0)?,
         }))
     })?.filter_map(|r| r.ok()).collect();
     Ok(rows)
