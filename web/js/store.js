@@ -215,8 +215,8 @@ export function createStore() {
   }
 
   // ── Chart helpers ──
-  function chartTextColor() { return darkMode.value ? '#94a3b8' : '#374151'; }
-  function chartGridColor() { return darkMode.value ? 'rgba(71,85,105,0.3)' : 'rgba(229,231,235,0.8)'; }
+  function chartTextColor() { return darkMode.value ? '#98989f' : '#6e6e73'; }
+  function chartGridColor() { return darkMode.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'; }
 
   return {
     darkMode, applyDarkMode, toggleDarkMode,

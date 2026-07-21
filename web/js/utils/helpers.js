@@ -13,9 +13,10 @@ export function renderMarkdown(text) {
 }
 
 export function generateColors(n) {
+  // iOS 系统色调色板
   const palette = [
-    '#6366F1','#EC4899','#10B981','#F59E0B','#8B5CF6',
-    '#EF4444','#06B6D4','#F97316','#3B82F6','#14B8A6'
+    '#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE',
+    '#5AC8FA','#FF2D55','#5856D6','#FFCC00','#00C7BE'
   ];
   return Array.from({length: n}, (_, i) => palette[i % palette.length]);
 }

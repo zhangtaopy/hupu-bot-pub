@@ -268,11 +268,11 @@ export function setupMonitorTab(store) {
         datasets: [{
           data: [sd.positive || 0, sd.neutral || 0, sd.negative || 0],
           backgroundColor: [
-            'rgba(52,211,153,0.85)',
-            'rgba(148,163,184,0.7)',
-            'rgba(248,113,113,0.85)'
+            'rgba(52,199,89,0.85)',
+            'rgba(142,142,147,0.6)',
+            'rgba(255,59,48,0.85)'
           ],
-          borderColor: store.darkMode.value ? '#1f2937' : '#ffffff',
+          borderColor: store.darkMode.value ? '#1c1c1e' : '#ffffff',
           borderWidth: 2,
           hoverOffset: 8,
         }]
@@ -293,10 +293,10 @@ export function setupMonitorTab(store) {
             }
           },
           tooltip: {
-            backgroundColor: store.darkMode.value ? 'rgba(17,24,39,0.9)' : 'rgba(255,255,255,0.95)',
-            titleColor: store.darkMode.value ? '#e2e8f0' : '#1e293b',
-            bodyColor: store.darkMode.value ? '#cbd5e1' : '#475569',
-            borderColor: store.darkMode.value ? 'rgba(75,85,99,0.5)' : 'rgba(226,232,240,0.8)',
+            backgroundColor: store.darkMode.value ? 'rgba(44,44,46,0.95)' : 'rgba(255,255,255,0.95)',
+            titleColor: store.darkMode.value ? '#f5f5f7' : '#1d1d1f',
+            bodyColor: store.darkMode.value ? '#98989f' : '#6e6e73',
+            borderColor: store.darkMode.value ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
             borderWidth: 1,
             padding: 10,
             cornerRadius: 8,
@@ -318,7 +318,7 @@ export function setupMonitorTab(store) {
           const fontSize = (height / 160).toFixed(2);
           ctx.font = `bold ${fontSize}em sans-serif`;
           ctx.textBaseline = 'middle';
-          ctx.fillStyle = store.darkMode.value ? '#e2e8f0' : '#1e293b';
+          ctx.fillStyle = store.darkMode.value ? '#f5f5f7' : '#1d1d1f';
           const text = String(total);
           const textX = Math.round((width - ctx.measureText(text).width) / 2);
           const textY = height / 2;
@@ -346,18 +346,18 @@ export function setupMonitorTab(store) {
           data: bd.map(b => b.mention_count || 0),
           backgroundColor: bd.map(b => {
             switch (b.sentiment) {
-              case '正面': return 'rgba(52,211,153,0.8)';
-              case '负面': return 'rgba(248,113,113,0.8)';
-              case '争议': return 'rgba(251,191,36,0.8)';
-              default: return 'rgba(148,163,184,0.7)';
+              case '正面': return 'rgba(52,199,89,0.8)';
+              case '负面': return 'rgba(255,59,48,0.8)';
+              case '争议': return 'rgba(255,149,0,0.8)';
+              default: return 'rgba(142,142,147,0.6)';
             }
           }),
           borderColor: bd.map(b => {
             switch (b.sentiment) {
-              case '正面': return '#34d399';
-              case '负面': return '#f87171';
-              case '争议': return '#fbbf24';
-              default: return '#94a3b8';
+              case '正面': return '#34C759';
+              case '负面': return '#FF3B30';
+              case '争议': return '#FF9500';
+              default: return '#8E8E93';
             }
           }),
           borderWidth: 1,
@@ -373,10 +373,10 @@ export function setupMonitorTab(store) {
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: store.darkMode.value ? 'rgba(17,24,39,0.9)' : 'rgba(255,255,255,0.95)',
-            titleColor: store.darkMode.value ? '#e2e8f0' : '#1e293b',
-            bodyColor: store.darkMode.value ? '#cbd5e1' : '#475569',
-            borderColor: store.darkMode.value ? 'rgba(75,85,99,0.5)' : 'rgba(226,232,240,0.8)',
+            backgroundColor: store.darkMode.value ? 'rgba(44,44,46,0.95)' : 'rgba(255,255,255,0.95)',
+            titleColor: store.darkMode.value ? '#f5f5f7' : '#1d1d1f',
+            bodyColor: store.darkMode.value ? '#98989f' : '#6e6e73',
+            borderColor: store.darkMode.value ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
             borderWidth: 1,
             padding: 10,
             cornerRadius: 8,
@@ -429,8 +429,8 @@ export function setupMonitorTab(store) {
               if (typeof v === 'string') v = parseFloat(v) || 0;
               return v > 1 ? v : v * 100;
             }),
-            backgroundColor: 'rgba(52,211,153,0.8)',
-            borderColor: '#34d399',
+            backgroundColor: 'rgba(52,199,89,0.8)',
+            borderColor: '#34C759',
             borderWidth: 1,
             borderRadius: { topLeft: 5, bottomLeft: 5 },
             borderSkipped: false,
@@ -444,8 +444,8 @@ export function setupMonitorTab(store) {
               if (typeof v === 'string') v = parseFloat(v) || 0;
               return v > 1 ? v : v * 100;
             }),
-            backgroundColor: 'rgba(248,113,113,0.8)',
-            borderColor: '#f87171',
+            backgroundColor: 'rgba(255,59,48,0.8)',
+            borderColor: '#FF3B30',
             borderWidth: 1,
             borderRadius: { topRight: 5, bottomRight: 5 },
             borderSkipped: false,
@@ -464,10 +464,10 @@ export function setupMonitorTab(store) {
             labels: { color: store.chartTextColor(), font: { size: 10 }, padding: 10, usePointStyle: true },
           },
           tooltip: {
-            backgroundColor: store.darkMode.value ? 'rgba(17,24,39,0.9)' : 'rgba(255,255,255,0.95)',
-            titleColor: store.darkMode.value ? '#e2e8f0' : '#1e293b',
-            bodyColor: store.darkMode.value ? '#cbd5e1' : '#475569',
-            borderColor: store.darkMode.value ? 'rgba(75,85,99,0.5)' : 'rgba(226,232,240,0.8)',
+            backgroundColor: store.darkMode.value ? 'rgba(44,44,46,0.95)' : 'rgba(255,255,255,0.95)',
+            titleColor: store.darkMode.value ? '#f5f5f7' : '#1d1d1f',
+            bodyColor: store.darkMode.value ? '#98989f' : '#6e6e73',
+            borderColor: store.darkMode.value ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
             borderWidth: 1,
             padding: 10,
             cornerRadius: 8,
@@ -503,8 +503,8 @@ export function setupMonitorTab(store) {
 
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 220);
-    gradient.addColorStop(0, 'rgba(129, 140, 248, 0.35)');
-    gradient.addColorStop(1, 'rgba(129, 140, 248, 0.02)');
+    gradient.addColorStop(0, 'rgba(0, 122, 255, 0.28)');
+    gradient.addColorStop(1, 'rgba(0, 122, 255, 0.02)');
 
     dailyChart = new Chart(ctx, {
       type: 'line',
@@ -513,14 +513,14 @@ export function setupMonitorTab(store) {
         datasets: [{
           label: '每日帖子数',
           data: dc.map(d => d.count),
-          borderColor: '#818cf8',
+          borderColor: '#007AFF',
           backgroundColor: gradient,
           fill: true,
           tension: 0.4,
           pointRadius: 5,
           pointHoverRadius: 7,
-          pointBackgroundColor: '#818cf8',
-          pointBorderColor: store.darkMode.value ? '#1f2937' : '#ffffff',
+          pointBackgroundColor: '#007AFF',
+          pointBorderColor: store.darkMode.value ? '#1c1c1e' : '#ffffff',
           pointBorderWidth: 2,
           borderWidth: 2.5,
         }]
@@ -534,10 +534,10 @@ export function setupMonitorTab(store) {
             labels: { color: store.chartTextColor(), font: { size: 11 }, usePointStyle: true }
           },
           tooltip: {
-            backgroundColor: store.darkMode.value ? 'rgba(17,24,39,0.9)' : 'rgba(255,255,255,0.95)',
-            titleColor: store.darkMode.value ? '#e2e8f0' : '#1e293b',
-            bodyColor: store.darkMode.value ? '#cbd5e1' : '#475569',
-            borderColor: store.darkMode.value ? 'rgba(75,85,99,0.5)' : 'rgba(226,232,240,0.8)',
+            backgroundColor: store.darkMode.value ? 'rgba(44,44,46,0.95)' : 'rgba(255,255,255,0.95)',
+            titleColor: store.darkMode.value ? '#f5f5f7' : '#1d1d1f',
+            bodyColor: store.darkMode.value ? '#98989f' : '#6e6e73',
+            borderColor: store.darkMode.value ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
             borderWidth: 1,
             padding: 10,
             cornerRadius: 8,

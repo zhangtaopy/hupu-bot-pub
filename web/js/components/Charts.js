@@ -41,10 +41,10 @@ export function setupCharts(store) {
           labels,
           datasets: [{
             label: '回帖数', data,
-            borderColor: 'rgb(99, 102, 241)',
-            backgroundColor: 'rgba(99, 102, 241, 0.08)',
+            borderColor: '#007AFF',
+            backgroundColor: 'rgba(0, 122, 255, 0.1)',
             fill: true, tension: 0.4, pointRadius: 3,
-            pointBackgroundColor: 'rgb(99, 102, 241)', borderWidth: 2,
+            pointBackgroundColor: '#007AFF', borderWidth: 2,
           }]
         },
         options: {
@@ -68,7 +68,7 @@ export function setupCharts(store) {
     const maxCount = Math.max(...store.wordCloudWords.value.map(w => w.count));
     const minCount = Math.min(...store.wordCloudWords.value.map(w => w.count));
     const weightFactor = canvas.offsetWidth / 60;
-    const colors = ['#6366F1','#EC4899','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#F97316','#3B82F6','#14B8A6'];
+    const colors = ['#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#5AC8FA','#FF2D55','#5856D6','#FFCC00','#00C7BE'];
 
     canvas.width = canvas.offsetWidth;
     canvas.height = 350;
@@ -81,7 +81,7 @@ export function setupCharts(store) {
           fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
           color: () => colors[Math.floor(Math.random() * colors.length)],
           rotateRatio: 0.3, rotationSteps: 2,
-          backgroundColor: darkMode.value ? '#1e293b' : '#ffffff',
+          backgroundColor: darkMode.value ? '#1c1c1e' : '#ffffff',
           weightMode: 'size', shape: 'circle', ellipticity: 0.6,
         });
       } catch (e) { console.warn('WordCloud render failed:', e); }
@@ -103,12 +103,12 @@ export function setupCharts(store) {
           datasets: [{
             label: '回帖数', data: hourData,
             backgroundColor: hourData.map((v, i) => {
-              if (i >= 7 && i <= 11) return '#F59E0B';
-              if (i >= 12 && i <= 13) return '#10B981';
-              if (i >= 20 || i <= 5) return '#8B5CF6';
-              return '#6366F1';
+              if (i >= 7 && i <= 11) return '#FF9500';
+              if (i >= 12 && i <= 13) return '#34C759';
+              if (i >= 20 || i <= 5) return '#AF52DE';
+              return '#007AFF';
             }),
-            borderRadius: 4,
+            borderRadius: 5,
           }]
         },
         options: {
@@ -131,8 +131,8 @@ export function setupCharts(store) {
           labels: ['周一','周二','周三','周四','周五','周六','周日'],
           datasets: [{
             label: '回帖数', data: store.detailedAnalysis.value.weekday_distribution,
-            backgroundColor: ['#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#10B981','#EF4444'],
-            borderRadius: 4,
+            backgroundColor: ['#007AFF','#007AFF','#007AFF','#007AFF','#007AFF','#34C759','#FF3B30'],
+            borderRadius: 5,
           }]
         },
         options: {
@@ -154,7 +154,7 @@ export function setupCharts(store) {
         type: 'doughnut',
         data: {
           labels: ['1-10字','11-50字','51-100字','101-200字','200+字'],
-          datasets: [{ data: buckets, backgroundColor: ['#06B6D4','#6366F1','#F59E0B','#F97316','#EF4444'] }]
+          datasets: [{ data: buckets, backgroundColor: ['#5AC8FA','#007AFF','#FF9500','#FF9F0A','#FF3B30'] }]
         },
         options: {
           responsive: true,
