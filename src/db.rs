@@ -144,6 +144,14 @@ fn create_tables(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_monitor_replies_tid ON monitor_replies(tid);
         CREATE INDEX IF NOT EXISTS idx_monitor_replies_fetch_date ON monitor_replies(fetch_date);
 
+        -- AI 玩法：成分卡缓存（查成分）
+        CREATE TABLE IF NOT EXISTS ghost_profile (
+            euid         TEXT PRIMARY KEY,
+            result       TEXT NOT NULL,
+            created_at   INTEGER NOT NULL,
+            updated_at   INTEGER NOT NULL
+        );
+
         -- 分区舆论监控：每日快照（AI分析结果缓存）
         CREATE TABLE IF NOT EXISTS monitor_snapshots (
             topic_id       TEXT NOT NULL,
@@ -417,6 +425,25 @@ pub fn save_ai_analysis(conn: &Connection, euid: &str, result_json: &str) -> Res
 
 pub fn get_ai_analysis(conn: &Connection, euid: &str) -> Result<Option<String>> {
     let mut stmt = conn.prepare("SELECT result FROM ai_analysis WHERE euid = ?1")?;
+    let mut rows = stmt.query_map(rusqlite::params![euid], |row| row.get::<_, String>(0))?;
+    match rows.next() {
+        Some(Ok(result)) => Ok(Some(result)),
+        _ => Ok(None),
+    }
+}
+
+pub fn save_ghost_profile(conn: &Connection, euid: &str, result_json: &str) -> Result<()> {
+    let now = chrono::Utc::now().timestamp();
+    conn.execute(
+        "INSERT OR REPLACE INTO ghost_profile (euid, result, created_at, updated_at)
+         VALUES (?1, ?2, COALESCE((SELECT created_at FROM ghost_profile WHERE euid = ?1), ?3), ?3)",
+        rusqlite::params![euid, result_json, now],
+    )?;
+    Ok(())
+}
+
+pub fn get_ghost_profile(conn: &Connection, euid: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT result FROM ghost_profile WHERE euid = ?1")?;
     let mut rows = stmt.query_map(rusqlite::params![euid], |row| row.get::<_, String>(0))?;
     match rows.next() {
         Some(Ok(result)) => Ok(Some(result)),

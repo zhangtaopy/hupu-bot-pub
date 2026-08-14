@@ -10,6 +10,7 @@ import { setupRepliesTab } from './components/RepliesTab.js';
 import { setupPostsTab } from './components/PostsTab.js';
 import { setupQaTab } from './components/QaTab.js';
 import { setupMonitorTab } from './components/MonitorTab.js';
+import { setupGhostTab } from './components/GhostTab.js';
 import * as api from './utils/api.js';
 import { fmtTokens, renderMarkdown } from './utils/helpers.js';
 
@@ -29,6 +30,7 @@ createApp({
     const posts = setupPostsTab(store, charts);
     const qa = setupQaTab(store);
     const monitor = setupMonitorTab(store);
+    const ghost = setupGhostTab(store);
 
     // ── Watch darkMode → re-render charts ──
     watch(store.darkMode, async () => {
@@ -74,6 +76,13 @@ createApp({
       store.qaReplyCount.value = 0;
       store.qaPostCount.value = 0;
       store.qaError.value = '';
+      // Ghost: 切换用户时清空魂穿对话和成分卡（避免串人）
+      store.ghostHistory.value = [];
+      store.ghostUsername.value = '';
+      store.ghostError.value = '';
+      store.profileCard.value = null;
+      store.profileError.value = '';
+      store.profileCached.value = false;
     });
 
     // ── Watch threshold → re-fetch similarity ──
@@ -183,6 +192,7 @@ createApp({
       ...posts,
       ...qa,
       ...monitor,
+      ...ghost,
       ...fetchSection,
       saveConfig, skipAiKeySetup, checkConfigStatus,
       fetchEuids, exportImage,

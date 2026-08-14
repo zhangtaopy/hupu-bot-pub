@@ -794,3 +794,145 @@ pub async fn qa_ask(
         .body(Body::from_stream(stream))
         .unwrap()
 }
+
+// ── Ghost: 成分卡（查成分） ──
+
+/// POST /api/ghost/profile?euid=xxx — 流式生成（或读缓存）用户成分卡，返回 NDJSON 事件流。
+/// 事件：stage（阶段进度）/ done（结果）/ error。
+pub async fn ghost_profile(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    Query(params): Query<GhostProfileQuery>,
+) -> Response {
+    let (tx, rx) = mpsc::channel::<String>(16);
+
+    let provider = match (&params.api_key, &params.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() =>
+            crate::deepseek::AiProvider::from_user_input(prov, key),
+        _ => match crate::resolver::resolve_ai_provider(None) {
+            Ok(p) => p,
+            Err(e) => {
+                let tx_err = tx.clone();
+                tokio::spawn(async move {
+                    let _ = tx_err.send(serde_json::to_string(&serde_json::json!({
+                        "type": "error", "error": e
+                    })).unwrap_or_default()).await;
+                });
+                return stream_response(rx);
+            }
+        },
+    };
+
+    let db_path = state.db_path.clone();
+    let http_client = state.http_client.clone();
+    let euid = params.euid.clone();
+    let refresh = params.refresh;
+    let tx_agent = tx.clone();
+
+    tokio::spawn(async move {
+        if let Err(e) = crate::services::ghost::stream_profile_card(
+            &db_path, &http_client, &provider, &euid, refresh, &tx_agent,
+        ).await {
+            let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
+                "type": "error", "error": e.to_string()
+            })).unwrap_or_default()).await;
+        }
+    });
+
+    stream_response(rx)
+}
+
+/// 把 NDJSON 事件 channel 包装成流式 HTTP 响应（与 qa/chat 共用）。
+fn stream_response(rx: mpsc::Receiver<String>) -> Response {
+    let stream = ReceiverStream::new(rx).map(|data| {
+        Ok::<_, Infallible>(Bytes::from(format!("{}\n", data)))
+    });
+
+    Response::builder()
+        .header("Content-Type", "application/x-ndjson")
+        .header("Cache-Control", "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(Body::from_stream(stream))
+        .unwrap()
+}
+
+// ── Ghost: 魂穿（嘴替 / 对线模拟） ──
+
+/// POST /api/ghost/chat — 流式魂穿，返回 NDJSON 事件流（start / answer / error）。
+pub async fn ghost_chat(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Json(body): axum::extract::Json<GhostChatRequest>,
+) -> Response {
+    let (tx, rx) = mpsc::channel::<String>(16);
+
+    let empty_content = body.content.trim().is_empty();
+    let mode = if body.mode.is_empty() { "reply" } else { body.mode.as_str() };
+
+    // Determine provider: user-supplied key first, then config fallback
+    let cfg = crate::config::try_get();
+    let maybe_provider = match (&body.api_key, &body.provider) {
+        (Some(key), Some(prov)) if !key.is_empty() => {
+            Some(crate::deepseek::AiProvider::from_user_input(prov, key))
+        }
+        _ => cfg.as_ref().and_then(|c| {
+            if c.api_key.is_empty() { None } else { Some(c.ai_provider()) }
+        }),
+    };
+
+    // Validate
+    let validation_err: Option<String> = match (&maybe_provider, empty_content) {
+        (None, _) => {
+            if cfg.is_none() {
+                Some("请先配置 Cookie".into())
+            } else {
+                Some("未配置 AI API Key（请在 config.json 中添加 api_key 或页面上填写）".into())
+            }
+        }
+        (_, true) => Some("内容不能为空".into()),
+        _ => None,
+    };
+
+    // Spawn streaming if valid
+    if let Some(provider) = &maybe_provider {
+        if validation_err.is_none() {
+            let db_path = state.db_path.clone();
+            let http_client = state.http_client.clone();
+            let provider = provider.clone();
+            let euid = body.euid.clone();
+            let content = body.content.clone();
+            let history = body.history.clone();
+            let mode = mode.to_string();
+            let tx_agent = tx.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = crate::services::ghost::run_ghost_chat_streaming(
+                    &db_path, &http_client, &provider, &euid, &mode, &content, &history, &tx_agent,
+                ).await {
+                    let _ = tx_agent.send(serde_json::to_string(&serde_json::json!({
+                        "type": "error", "error": e.to_string()
+                    })).unwrap_or_default()).await;
+                }
+            });
+        }
+    }
+
+    // Send validation error through channel
+    if let Some(err) = validation_err {
+        let tx_err = tx.clone();
+        tokio::spawn(async move {
+            let _ = tx_err.send(serde_json::to_string(&serde_json::json!({
+                "type": "error", "error": err
+            })).unwrap_or_default()).await;
+        });
+    }
+
+    let stream = ReceiverStream::new(rx).map(|data| {
+        Ok::<_, Infallible>(Bytes::from(format!("{}\n", data)))
+    });
+
+    Response::builder()
+        .header("Content-Type", "application/x-ndjson")
+        .header("Cache-Control", "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(Body::from_stream(stream))
+        .unwrap()
+}

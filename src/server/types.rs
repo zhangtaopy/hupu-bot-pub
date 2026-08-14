@@ -210,6 +210,39 @@ pub struct HistoryEntry {
     pub answer: String,
 }
 
+// ── Ghost (魂穿) / Profile (成分卡) types ──
+
+#[derive(Deserialize)]
+pub struct GhostProfileQuery {
+    pub euid: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// 强制重新生成，跳过缓存
+    #[serde(default)]
+    pub refresh: bool,
+}
+
+#[derive(Deserialize)]
+pub struct GhostChatRequest {
+    pub euid: String,
+    /// 模式：reply = 嘴替写一条回复，chat = 多轮对线/克隆人聊天
+    #[serde(default = "default_ghost_mode")]
+    pub mode: String,
+    pub content: String,
+    #[serde(default)]
+    pub history: Vec<HistoryEntry>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
+}
+
+fn default_ghost_mode() -> String {
+    "reply".to_string()
+}
+
 // ── Monitor (舆论监控) types ──
 
 #[derive(Deserialize)]

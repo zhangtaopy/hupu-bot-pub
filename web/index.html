@@ -138,6 +138,7 @@
         <button @click="activeTab='posts'" :class="{ active: activeTab==='posts' }">发帖数据</button>
         <button @click="activeTab='qa'" :class="{ active: activeTab==='qa' }">AI 问答</button>
         <button @click="activeTab='monitor'" :class="{ active: activeTab==='monitor' }">舆论监控</button>
+        <button @click="activeTab='ghost'" :class="{ active: activeTab==='ghost' }">查成分</button>
       </div>
 
       <!-- Search & actions (hidden on monitor tab) -->
@@ -146,7 +147,7 @@
           <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input v-model="euid" @focus="onEuidFocus" @blur="onEuidBlur" @keyup.enter="activeTab==='replies' ? analyze() : loadPosts()" placeholder="输入用户 euid"
+          <input v-model="euid" @focus="onEuidFocus" @blur="onEuidBlur" @keyup.enter="activeTab==='replies' ? analyze() : (activeTab==='posts' ? loadPosts() : null)" placeholder="输入用户 euid"
             autocomplete="off" class="apple-input !pl-9">
           <div v-if="showEuidDropdown && filteredEuids.length" class="apple-popover absolute top-full left-0 right-0 mt-1.5 z-50 max-h-60 overflow-y-auto p-1.5">
             <div v-for="item in filteredEuids" :key="item.euid"
@@ -159,7 +160,7 @@
           </div>
         </div>
 
-        <button @click="activeTab==='replies' ? analyze() : loadPosts()" :disabled="loading || postLoading" class="apple-btn apple-btn-primary">
+        <button v-if="activeTab!=='ghost'" @click="activeTab==='replies' ? analyze() : loadPosts()" :disabled="loading || postLoading" class="apple-btn apple-btn-primary">
           {{ activeTab === 'replies' ? (loading ? '加载中…' : '分析') : (postLoading ? '加载中…' : '加载发帖') }}
         </button>
 
@@ -902,8 +903,18 @@
 
   <!-- ═══════════════════ QA TAB ═══════════════════ -->
   <div v-if="activeTab === 'qa'" class="max-w-4xl mx-auto px-4 pt-4 pb-12">
-    <!-- User info -->
-    <div v-if="qaUsername" class="mt-6 animate-card">
+    <!-- 子 tab 切换器：问答 / 魂穿 -->
+    <div class="flex items-center gap-1.5 mt-4 p-1 rounded-xl" style="width: fit-content; background: var(--fill)">
+      <button @click="qaSubTab='ask'" class="px-4 py-1.5 text-[13px] font-medium rounded-lg transition-colors"
+        :style="qaSubTab==='ask' ? { background: 'var(--surface)', color: 'var(--text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' } : { color: 'var(--text-tertiary)' }">💬 问答</button>
+      <button @click="qaSubTab='ghost'" class="px-4 py-1.5 text-[13px] font-medium rounded-lg transition-colors"
+        :style="qaSubTab==='ghost' ? { background: 'var(--surface)', color: 'var(--text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' } : { color: 'var(--text-tertiary)' }">👻 魂穿</button>
+    </div>
+
+    <!-- ── 问答子 tab ── -->
+    <div v-if="qaSubTab === 'ask'">
+      <!-- User info -->
+      <div v-if="qaUsername" class="mt-6 animate-card">
       <div class="apple-card p-4 flex items-center gap-3">
         <div class="apple-avatar w-10 h-10 text-sm">{{ qaUsername.charAt(0) }}</div>
         <div>
@@ -1020,6 +1031,74 @@
             class="apple-chip green !py-1.5 !px-3 cursor-pointer transition-transform hover:scale-[1.03] disabled:opacity-50">
             {{ q }}
           </button>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- ── 魂穿子 tab（复用问答聊天气泡样式） ── -->
+    <div v-if="qaSubTab === 'ghost'" class="mt-6">
+      <!-- 模式选择 + 扮演提示 -->
+      <div class="apple-card p-4">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-semibold flex items-center gap-1.5" style="color: var(--text-primary)">
+            <span class="section-dot purple"></span> 魂穿
+          </span>
+          <span class="text-xs" style="color: var(--text-tertiary)">AI 模仿该用户的说话风格</span>
+          <span v-if="ghostUsername" class="text-xs ml-auto" style="color: var(--text-tertiary)">正在扮演 <b style="color: var(--purple, #bf5af2)">{{ ghostUsername }}</b></span>
+        </div>
+        <div class="flex items-center gap-2 mt-3">
+          <button @click="setGhostMode('reply')" class="apple-chip" :class="ghostMode==='reply' ? 'purple' : ''" style="cursor:pointer">💬 嘴替</button>
+          <button @click="setGhostMode('chat')" class="apple-chip" :class="ghostMode==='chat' ? 'purple' : ''" style="cursor:pointer">⚔️ 对线模拟</button>
+          <span class="text-xs" style="color: var(--text-quaternary)">{{ ghostMode==='chat' ? '多轮对话，AI 全程扮演 TA' : 'TA 以目标用户口吻写一条回帖' }}</span>
+        </div>
+      </div>
+
+      <!-- 魂穿对话历史 -->
+      <div v-if="ghostHistory.length" class="mt-6 space-y-5">
+        <div v-for="(msg, idx) in ghostHistory" :key="idx" class="animate-card">
+          <div class="flex justify-end mb-2.5">
+            <div class="max-w-[75%] bubble-user">
+              <p class="text-sm leading-relaxed">{{ msg.question }}</p>
+            </div>
+          </div>
+          <div class="flex justify-start">
+            <div class="max-w-[85%] bubble-ai">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="apple-chip purple" style="font-size: 11px">👻 {{ msg.username || ghostUsername || 'TA' }}</span>
+                <span class="text-xs tabular" style="color: var(--text-tertiary)">{{ msg.time }}</span>
+              </div>
+              <div v-if="msg.thinking && !msg.answer" class="thinking-dots text-sm font-medium" style="color: var(--text-tertiary)">
+                <span>.</span><span>.</span><span>.</span>
+              </div>
+              <div v-if="msg.answer" class="text-sm leading-relaxed md-content" v-html="renderMarkdown(msg.answer)"></div>
+              <div v-if="msg.error" class="text-sm mt-1" style="color: var(--red)">{{ msg.error }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 魂穿输入 -->
+      <div class="mt-6 animate-card">
+        <div class="apple-card p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-sm font-semibold flex items-center gap-1.5" style="color: var(--text-primary)">
+              <span class="section-dot purple"></span> 输入内容
+            </span>
+            <span class="text-xs" style="color: var(--text-tertiary)">{{ ghostMode==='chat' ? '跟 TA 说点什么，开始对线…' : '描述场景或粘贴对方发言' }}</span>
+          </div>
+          <div class="flex gap-2">
+            <input v-model="ghostInput" @keyup.enter="ghostSend"
+              :placeholder="ghostMode==='chat' ? '跟 TA 说点什么，开始对线…' : '描述场景或粘贴对方发言，TA 会以目标用户口吻回复…'"
+              :disabled="ghostLoading" class="apple-input flex-1">
+            <button @click="ghostSend" :disabled="ghostLoading || !ghostInput.trim() || !euid.trim()" class="apple-btn apple-btn-primary">
+              <svg v-if="!ghostLoading" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              <span v-if="ghostLoading">扮演中…</span>
+              <span v-else>发送</span>
+            </button>
+          </div>
+          <div v-if="ghostError" class="apple-alert error mt-3">{{ ghostError }}</div>
+          <div v-if="!euid.trim()" class="mt-2 text-xs" style="color: var(--text-tertiary)">请先在顶部搜索框输入要扮演的用户 euid</div>
         </div>
       </div>
     </div>
@@ -1249,8 +1328,126 @@
     </div>
   </div>
 
+  <!-- ── Ghost Tab (成分卡 + 魂穿) ── -->
+  <div v-if="activeTab==='ghost'" class="max-w-4xl mx-auto px-4 pt-4 pb-12">
+    <!-- 查成分 -->
+    <div class="animate-card">
+      <div class="apple-card p-5">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-semibold flex items-center gap-1.5" style="color: var(--text-primary)">
+            <span class="section-dot orange"></span> 查成分
+          </span>
+          <span class="text-xs" style="color: var(--text-tertiary)">基于回帖/发帖生成用户的虎扑成分卡</span>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button @click="ghostProfile" :disabled="profileLoading || !euid.trim()" class="apple-btn apple-btn-primary">
+            <svg v-if="!profileLoading" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            <span v-if="profileLoading">分析中…</span>
+            <span v-else>{{ profileCard ? '重新生成' : '生成成分卡' }}</span>
+          </button>
+          <span v-if="profileCached" class="apple-chip blue text-xs" style="align-self:center">已缓存</span>
+          <div v-if="!euid.trim()" class="flex items-center text-xs" style="color: var(--text-tertiary)">请先在顶部搜索框输入用户 euid</div>
+        </div>
+        <div v-if="profileError" class="apple-alert error mt-3">{{ profileError }}</div>
+        <div v-if="profileLoading" class="flex items-center gap-2 mt-3 text-sm" style="color: var(--text-secondary)">
+          <span class="thinking-dots font-medium" style="color: var(--text-tertiary)"><span>.</span><span>.</span><span>.</span></span>
+          {{ profileStage }}
+        </div>
+        <div v-if="profileCard" class="mt-5">
+          <!-- 成分卡片主体 -->
+          <div class="rounded-2xl overflow-hidden border animate-card" style="border-color: var(--separator); box-shadow: 0 8px 30px rgba(0,0,0,0.08)">
+            <!-- 渐变头部 -->
+            <div class="px-5 pt-6 pb-5" style="background: linear-gradient(135deg, #2c2c2e 0%, #1d1d1f 60%, #3a3a3c 100%); position: relative; overflow: hidden">
+              <div style="position:absolute; right:-30px; top:-30px; width:140px; height:140px; border-radius:50%; background: radial-gradient(circle, rgba(255,159,10,0.25), transparent 70%)"></div>
+              <div class="flex items-center gap-4 relative">
+                <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white shrink-0" style="background: linear-gradient(135deg, #ff9f0a, #ff453a); box-shadow: 0 4px 12px rgba(255,69,58,0.35)">{{ (profileCard.username || euid).charAt(0) }}</div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-white text-xl font-bold truncate">{{ profileCard.username || euid }}</div>
+                  <div class="text-white/50 text-xs font-mono mt-0.5">{{ euid }}</div>
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    <span v-if="profileCard.fan_identity" class="text-[11px] px-2.5 py-0.5 rounded-full font-medium" style="background: rgba(255,255,255,0.15); color: #ffd60a">{{ profileCard.fan_identity }}</span>
+                  </div>
+                </div>
+                <div class="text-right shrink-0">
+                  <div class="text-white text-lg font-semibold">{{ profileCard.main_forum || '—' }}</div>
+                  <div class="text-white/45 text-[11px] mt-0.5">主混迹板块</div>
+                </div>
+              </div>
+            </div>
+            <!-- 指数仪表区 -->
+            <div class="grid grid-cols-2" style="border-bottom: 1px solid var(--separator)">
+              <div class="py-4 px-5 text-center">
+                <div class="text-[11px] font-medium mb-1" style="color: var(--text-tertiary)">抽象指数</div>
+                <div class="text-4xl font-black tabular leading-none" style="color: var(--orange)">{{ profileCard.abstract_index ?? 0 }}</div>
+                <div class="mt-2 h-1.5 rounded-full mx-auto max-w-[120px]" style="background: var(--separator)">
+                  <div class="h-full rounded-full" :style="{ width: Math.min(profileCard.abstract_index ?? 0, 100) + '%', background: 'linear-gradient(90deg, #ff9f0a, #ff453a)' }"></div>
+                </div>
+              </div>
+              <div class="py-4 px-5 text-center" style="border-left: 1px solid var(--separator)">
+                <div class="text-[11px] font-medium mb-1" style="color: var(--text-tertiary)">水贴指数</div>
+                <div class="text-4xl font-black tabular leading-none" style="color: var(--blue)">{{ profileCard.water_index ?? 0 }}</div>
+                <div class="mt-2 h-1.5 rounded-full mx-auto max-w-[120px]" style="background: var(--separator)">
+                  <div class="h-full rounded-full" :style="{ width: Math.min(profileCard.water_index ?? 0, 100) + '%', background: 'linear-gradient(90deg, #0a84ff, #64d2ff)' }"></div>
+                </div>
+              </div>
+            </div>
+            <!-- 内容区 -->
+            <div class="p-5 space-y-4" style="background: var(--surface)">
+              <!-- 点亮质量 -->
+              <div v-if="profileCard.light_quality" class="flex items-start gap-2.5">
+                <span class="text-base leading-6">💡</span>
+                <div>
+                  <div class="text-[11px] font-medium mb-0.5" style="color: var(--text-tertiary)">点亮质量</div>
+                  <div class="text-sm" style="color: var(--text-primary)">{{ profileCard.light_quality }}</div>
+                </div>
+              </div>
+              <!-- 口头禅 -->
+              <div v-if="profileCard.catchphrases && profileCard.catchphrases.length">
+                <div class="text-[11px] font-medium mb-1.5" style="color: var(--text-tertiary)">口头禅</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="(p, pi) in profileCard.catchphrases" :key="pi" class="apple-chip orange">{{ p }}</span>
+                </div>
+              </div>
+              <!-- 经典语录 -->
+              <div v-if="profileCard.classic_quotes && profileCard.classic_quotes.length">
+                <div class="text-[11px] font-medium mb-1.5" style="color: var(--text-tertiary)">经典语录</div>
+                <div class="space-y-1.5">
+                  <div v-for="(q, qi) in profileCard.classic_quotes" :key="qi" class="text-sm rounded-xl px-3.5 py-2.5 border-l-[3px]" style="background: var(--fill); border-color: var(--orange); color: var(--text-secondary)">“{{ q }}”</div>
+                </div>
+              </div>
+              <!-- 历史黑点 -->
+              <div v-if="profileCard.black_history && profileCard.black_history.length">
+                <div class="text-[11px] font-medium mb-1.5" style="color: var(--text-tertiary)">历史黑点</div>
+                <div class="space-y-1.5">
+                  <div v-for="(b, bi) in profileCard.black_history" :key="bi" class="text-sm rounded-xl px-3.5 py-2.5" style="background: rgba(255,69,58,0.08); color: var(--red)">⚠ {{ b }}</div>
+                </div>
+              </div>
+              <!-- 特长 -->
+              <div v-if="profileCard.specialties && profileCard.specialties.length">
+                <div class="text-[11px] font-medium mb-1.5" style="color: var(--text-tertiary)">核心特长</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="(sp, spi) in profileCard.specialties" :key="spi" class="apple-chip blue">🏆 {{ sp }}</span>
+                </div>
+              </div>
+              <!-- 热评总结 -->
+              <div v-if="profileCard.summary" class="rounded-xl px-4 py-3 border" style="background: var(--fill); border-color: var(--separator)">
+                <div class="text-[11px] font-medium mb-1" style="color: var(--text-tertiary)">热评总结</div>
+                <div class="text-sm leading-relaxed" style="color: var(--text-primary)">{{ profileCard.summary }}</div>
+              </div>
+            </div>
+            <!-- 底部水印 -->
+            <div class="px-5 py-2.5 flex items-center justify-between" style="background: var(--fill); border-top: 1px solid var(--separator)">
+              <span class="text-[11px] font-medium" style="color: var(--text-tertiary)">🃏 HUPU 成分卡</span>
+              <span class="text-[11px]" style="color: var(--text-quaternary)">AI 生成 · 仅供娱乐</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Empty State ── -->
-  <div v-if="activeTab!=='monitor' && !monitorLoading && !loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
+  <div v-if="activeTab!=='monitor' && activeTab!=='ghost' && !monitorLoading && !loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
     class="max-w-6xl mx-auto px-4 mt-28 text-center">
     <div class="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center" style="background: var(--fill)">
       <svg class="w-8 h-8" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">

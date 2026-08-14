@@ -159,6 +159,8 @@ export function createStore() {
   const qaUsername = ref('');
   const qaReplyCount = ref(0);
   const qaPostCount = ref(0);
+  // QA tab 内的子 tab：ask = 问答，ghost = 魂穿
+  const qaSubTab = ref('ask');
   const suggestedQuestions = [
     '这个用户主要在哪些板块活动？',
     '分析一下这个用户的发帖风格和特点',
@@ -166,6 +168,19 @@ export function createStore() {
     '这个用户在虎扑上最活跃的时期是什么时候？',
     '根据发言推测这个用户的个人信息',
   ];
+
+  // ── Ghost state (成分卡 + 魂穿) ──
+  const ghostMode = ref('reply');
+  const ghostInput = ref('');
+  const ghostHistory = ref([]);
+  const ghostLoading = ref(false);
+  const ghostError = ref('');
+  const ghostUsername = ref('');
+  const profileCard = ref(null);
+  const profileLoading = ref(false);
+  const profileError = ref('');
+  const profileCached = ref(false);
+  const profileStage = ref('');
 
   // ── Computed ──
   const sortedPosts = computed(() =>
@@ -240,7 +255,9 @@ export function createStore() {
     aiPostProgressPhase, aiPostProgressCurrent, aiPostProgressTotal,
     totalReplies, totalVisits, totalLights, videoCount,
     qaQuestion, qaHistory, qaLoading, qaError, qaUsername,
-    qaReplyCount, qaPostCount, suggestedQuestions, sortedPosts,
+    qaReplyCount, qaPostCount, qaSubTab, suggestedQuestions, sortedPosts,
+    ghostMode, ghostInput, ghostHistory, ghostLoading, ghostError, ghostUsername,
+    profileCard, profileLoading, profileError, profileCached, profileStage,
     hasPersonalInfo, toggleGroup, selectEuid, onEuidFocus, onEuidBlur, clearDisplayData,
     chartTextColor, chartGridColor,
     chartInstances, timers,

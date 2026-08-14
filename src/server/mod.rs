@@ -47,6 +47,8 @@ pub async fn start_server(port: u16, deploy_mode: bool) -> anyhow::Result<()> {
         .route("/api/posts/analyze/ai-progress", get(handlers::get_ai_post_progress))
         .route("/api/euids", get(handlers::get_all_euids))
         .route("/api/qa/ask", post(handlers::qa_ask))
+        .route("/api/ghost/profile", post(handlers::ghost_profile))
+        .route("/api/ghost/chat", post(handlers::ghost_chat))
         .route("/api/monitor/fetch", post(monitor_handlers::start_monitor_fetch))
         .route("/api/monitor/fetch-progress", get(monitor_handlers::get_monitor_fetch_progress))
         .route("/api/monitor/posts", get(monitor_handlers::get_monitor_posts))

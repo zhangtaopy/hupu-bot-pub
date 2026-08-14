@@ -205,6 +205,36 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         replies: usize,
     },
+
+    /// 生成用户成分卡（查成分），基于回帖/发帖数据由 AI 生成
+    Profile {
+        /// 用户加密 UID
+        #[arg(short = 'e', long)]
+        euid: String,
+
+        /// 输出格式: json / text
+        #[arg(short = 'f', long, default_value = "json")]
+        format: String,
+    },
+
+    /// 魂穿：模仿指定用户的风格生成回复/对话
+    Ghost {
+        /// 用户加密 UID（风格来源）
+        #[arg(short = 'e', long)]
+        euid: String,
+
+        /// 对方发言或话题内容
+        #[arg(short = 'c', long)]
+        content: String,
+
+        /// 模式: reply(嘴替写一条回复) / chat(多轮对线)
+        #[arg(short = 'm', long, default_value = "reply")]
+        mode: String,
+
+        /// 输出格式: text / json
+        #[arg(short = 'f', long, default_value = "text")]
+        format: String,
+    },
 }
 
 #[tokio::main]
@@ -365,6 +395,71 @@ async fn main() -> Result<()> {
                     "json" => topic::format_post_json(&posts)?,
                     "simple" => topic::format_post_simple(&posts),
                     _ => topic::format_post_table(&posts),
+                }
+            }
+        }
+        Commands::Profile { euid, format } => {
+            let provider = resolver::resolve_ai_provider(None)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let db_path = std::path::Path::new("hupu.db");
+            let http_client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()?;
+
+            let (card, _cached) = services::ghost::build_profile_card(
+                db_path, &http_client, &provider, &euid, false,
+            ).await?;
+
+            if format == "text" {
+                services::ghost::print_profile_card(&card);
+            } else {
+                println!("{}", serde_json::to_string_pretty(&card)?);
+            }
+        }
+        Commands::Ghost { euid, content, mode, format } => {
+            let provider = resolver::resolve_ai_provider(None)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let db_path = std::path::Path::new("hupu.db");
+            let http_client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()?;
+
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+            let provider_c = provider.clone();
+            let euid_c = euid.clone();
+            let mode_c = mode.clone();
+            let content_c = content.clone();
+            let tx_c = tx.clone();
+            tokio::spawn(async move {
+                if let Err(e) = services::ghost::run_ghost_chat_streaming(
+                    db_path, &http_client, &provider_c, &euid_c,
+                    &mode_c, &content_c, &[], &tx_c,
+                ).await {
+                    let _ = tx_c.send(serde_json::to_string(&serde_json::json!({
+                        "type": "error", "error": e.to_string()
+                    })).unwrap_or_default()).await;
+                }
+            });
+            // 释放主作用域里的 sender，否则 rx.recv() 永远等不到 channel 关闭而挂死
+            drop(tx);
+
+            while let Some(line) = rx.recv().await {
+                if let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) {
+                    match event.get("type").and_then(|t| t.as_str()) {
+                        Some("answer") => {
+                            let answer = event.get("answer").and_then(|a| a.as_str()).unwrap_or("");
+                            if format == "json" {
+                                println!("{}", serde_json::to_string_pretty(&event)?);
+                            } else {
+                                println!("{}", answer);
+                            }
+                        }
+                        Some("error") => {
+                            let err = event.get("error").and_then(|e| e.as_str()).unwrap_or("未知错误");
+                            eprintln!("错误: {}", err);
+                        }
+                        _ => {}
+                    }
                 }
             }
         }

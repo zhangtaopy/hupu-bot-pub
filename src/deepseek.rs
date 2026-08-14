@@ -965,6 +965,88 @@ pub async fn call_llm_text_with_tokens(
     Ok((content, body.usage.unwrap_or_default()))
 }
 
+// ── AI 玩法：成分卡（查成分）+ 魂穿（克隆人/嘴替） ──
+
+/// 构建用户风格样本：取最近 `max_items` 条回帖，带板块、时间、点亮信息，去 HTML。
+/// 成分卡和魂穿共用这一输入。
+pub fn build_style_samples(replies: &[ReplyRow], max_items: usize) -> String {
+    let mut sorted = replies.to_vec();
+    sorted.sort_by(|a, b| b.create_time.cmp(&a.create_time)); // 最近优先
+    sorted.truncate(max_items);
+    let items: Vec<String> = sorted.iter().enumerate().map(|(i, r)| {
+        // 每条内容截断到 300 字符，减小 AI 输入、加快响应
+        let clean_full = strip_html(&r.content);
+        let clean: String = if clean_full.chars().count() > 300 {
+            let t: String = clean_full.chars().take(300).collect();
+            format!("{}…", t)
+        } else {
+            clean_full
+        };
+        let topic = r.topic_name.as_deref().unwrap_or("未知板块");
+        let time = r.format_time.as_deref().unwrap_or("");
+        format!("{}. [{}] [{}] [亮了{}] {}", i + 1, topic, time, r.light_count, clean)
+    }).collect();
+    items.join("\n")
+}
+
+pub const PROFILE_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛"查成分"大师，擅长从用户的发言记录中还原其真实面目。请根据提供的用户回帖和发帖记录，生成该用户的"成分卡"。
+
+输出严格JSON格式，不要包含其他文字，结构如下：
+{
+  "username": "用户名",
+  "main_forum": "主要活跃板块",
+  "fan_identity": "粉籍判断（如：勇士球迷/米粉/某队黑粉/抽象派，基于发言证据）",
+  "abstract_index": 0到100的整数（抽象程度：玩梗、阴阳怪气、复读的比例）,
+  "water_index": 0到100的整数（水贴程度：内容空洞、复读、刷屏的比例）,
+  "light_quality": "点亮质量评价（高亮回帖的水平如何，一句话）",
+  "catchphrases": ["口头禅1", "口头禅2"],
+  "classic_quotes": ["经典语录1（原话或极简概括）", "经典语录2"],
+  "black_history": ["历史黑点1（低亮高踩、被围攻、自相矛盾等，无则空数组）"],
+  "specialties": ["核心技能/特长1（如：懂车帝、苹果黑、节奏大师）"],
+  "summary": "50-100字的一句话总结，要犀利、有虎扑味，像写热评，但必须基于证据"
+}
+所有判断都必须来自提供的发言记录，不能编造；无法判断的字段用空值。"#;
+
+/// 生成成分卡：输入风格样本 + 发帖上下文 + 统计摘要，返回解析后的 JSON 和原始内容。
+pub async fn generate_profile_card(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    style_samples: &str,
+    posts_context: &str,
+    stats_summary: &str,
+) -> Result<(serde_json::Value, String)> {
+    let user_prompt = format!(
+        "=== 用户基本数据 ===\n{}\n\n=== 最近回帖样本 ===\n{}\n\n=== 发帖样本 ===\n{}",
+        stats_summary, style_samples, posts_context
+    );
+    let result = call_llm(client, provider, PROFILE_SYSTEM_PROMPT, &user_prompt).await?;
+    Ok((result.value, result.raw_content))
+}
+
+/// 魂穿：构建 system prompt，让 AI 以指定用户的口吻说话。
+/// `mode`: "chat" = 多轮对话扮演（对线/克隆人聊天），其他 = 单条嘴替回复。
+pub fn build_ghost_system_prompt(username: &str, style_samples: &str, mode: &str) -> String {
+    let mode_desc = match mode {
+        "chat" => "你正在和对方进行多轮对话，全程扮演该用户，用他的口吻回应对方说的每一句话，可以延续上一轮的话题。",
+        _ => "你以该用户的口吻，针对对方给出的发言或话题，写一条虎扑回帖。",
+    };
+    format!(
+        r#"你是虎扑用户「{username}」。以下是他在虎扑的真实发言记录（风格样本）：
+
+--- 风格样本开始 ---
+{style_samples}
+--- 风格样本结束 ---
+
+要求：
+1. 完全模仿他的语气、用词习惯、口头禅、标点使用（包括爱用省略号、空格、表情等特征）
+2. 延续他的一贯观点立场，不要输出和他立场相反的内容
+3. {mode_desc}
+4. 回复要像真实的虎扑回帖，不要暴露自己是AI，不要解释，直接输出内容
+5. 不要编造样本中没有的信息；如果不知道他怎么看，就按他样本里体现的价值观合理延续"#,
+        username = username, style_samples = style_samples, mode_desc = mode_desc
+    )
+}
+
 /// Call LLM with optional tool calling support. Returns content (if any) and tool_calls.
 /// Tools should be provided every round, otherwise the API won't return tool_calls.
 pub async fn call_llm_with_tools(
