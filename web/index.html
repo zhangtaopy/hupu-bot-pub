@@ -13,6 +13,7 @@
   </script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.0.2/wordcloud2.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="css/style.css?v=3">
@@ -139,6 +140,7 @@
         <button @click="activeTab='qa'" :class="{ active: activeTab==='qa' }">AI 问答</button>
         <button @click="activeTab='monitor'" :class="{ active: activeTab==='monitor' }">舆论监控</button>
         <button @click="activeTab='ghost'" :class="{ active: activeTab==='ghost' }">查成分</button>
+        <button @click="activeTab='graph'" :class="{ active: activeTab==='graph' }">互动图谱</button>
       </div>
 
       <!-- Search & actions (hidden on monitor tab) -->
@@ -147,7 +149,7 @@
           <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input v-model="euid" @focus="onEuidFocus" @blur="onEuidBlur" @keyup.enter="activeTab==='replies' ? analyze() : (activeTab==='posts' ? loadPosts() : null)" placeholder="输入用户 euid"
+          <input v-model="euid" @focus="onEuidFocus" @blur="onEuidBlur" @keyup.enter="activeTab==='replies' ? analyze() : (activeTab==='posts' ? loadPosts() : (activeTab==='graph' ? loadGraph() : null))" placeholder="输入用户 euid"
             autocomplete="off" class="apple-input !pl-9">
           <div v-if="showEuidDropdown && filteredEuids.length" class="apple-popover absolute top-full left-0 right-0 mt-1.5 z-50 max-h-60 overflow-y-auto p-1.5">
             <div v-for="item in filteredEuids" :key="item.euid"
@@ -160,8 +162,11 @@
           </div>
         </div>
 
-        <button v-if="activeTab!=='ghost'" @click="activeTab==='replies' ? analyze() : loadPosts()" :disabled="loading || postLoading" class="apple-btn apple-btn-primary">
+        <button v-if="activeTab!=='ghost' && activeTab!=='graph'" @click="activeTab==='replies' ? analyze() : loadPosts()" :disabled="loading || postLoading" class="apple-btn apple-btn-primary">
           {{ activeTab === 'replies' ? (loading ? '加载中…' : '分析') : (postLoading ? '加载中…' : '加载发帖') }}
+        </button>
+        <button v-if="activeTab==='graph'" @click="loadGraph" :disabled="graphLoading || !euid.trim()" class="apple-btn apple-btn-primary">
+          {{ graphLoading ? '生成中…' : '生成图谱' }}
         </button>
 
         <button v-if="activeTab==='replies'" @click="aiAnalyze" :disabled="aiLoading || !stats" class="apple-btn apple-btn-gray">
@@ -1446,8 +1451,138 @@
     </div>
   </div>
 
+  <!-- ═══════════════════ INTERACTION GRAPH TAB ═══════════════════ -->
+  <div v-if="activeTab==='graph'" class="max-w-6xl mx-auto px-4 pt-4 pb-12">
+    <!-- 说明 + 图例 -->
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] animate-card" style="color: var(--text-tertiary)">
+      <span class="text-sm font-semibold flex items-center gap-1.5" style="color: var(--text-primary)">
+        <span class="section-dot purple"></span> 互动图谱
+      </span>
+      <span>太阳系公转：互动分数越高轨道越靠中心 · 颜色 = 平均点亮质量 · 点击节点查看全部互动</span>
+      <span class="flex items-center gap-1.5">
+        <span class="apple-chip purple" style="font-size:10px">本人</span>
+        <span class="apple-chip red" style="font-size:10px">≥25亮</span>
+        <span class="apple-chip orange" style="font-size:10px">10~25亮</span>
+        <span class="apple-chip blue" style="font-size:10px">4~10亮</span>
+        <span class="apple-chip teal" style="font-size:10px">1~4亮</span>
+        <span class="apple-chip" style="font-size:10px">&lt;1亮</span>
+      </span>
+      <span v-if="graphData" class="ml-auto font-medium" style="color: var(--text-secondary)">
+        与 {{ graphData.total_targets }} 人互动 {{ graphData.total_interactions }} 次
+        <template v-if="graphData.shown_targets < graphData.total_targets"> · 展示前 {{ graphData.shown_targets }} 名</template>
+      </span>
+    </div>
+
+    <!-- 错误 -->
+    <div v-if="graphError" class="mt-4">
+      <div class="apple-alert error">
+        <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        {{ graphError }}
+      </div>
+    </div>
+
+    <!-- 图谱容器 -->
+    <div v-if="graphLoading" class="mt-4 apple-card p-12 text-center">
+      <span class="thinking-dots text-sm font-medium" style="color: var(--text-tertiary)"><span>.</span><span>.</span><span>.</span></span>
+      <p class="text-sm mt-2" style="color: var(--text-secondary)">正在构建互动图谱…</p>
+    </div>
+    <div v-else-if="graphData" class="mt-4 apple-card p-2 animate-card">
+      <div id="interaction-graph-chart" style="height: 720px; width: 100%"></div>
+      <p class="px-3 pb-2 text-[11px]" style="color: var(--text-quaternary)">圆圈自动围绕中心旋转 · 滚轮缩放 · 拖拽平移 · 悬停查看最热引用 · 点击查看全部互动</p>
+    </div>
+    <div v-else-if="!graphError" class="mt-4 apple-card p-14 text-center">
+      <div class="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center" style="background: var(--fill)">
+        <svg class="w-7 h-7" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium" style="color: var(--text-secondary)">输入用户 euid 后点击「生成图谱」</p>
+      <p class="text-xs mt-1.5" style="color: var(--text-quaternary)">基于已抓取的回帖引用数据，展示 TA 与谁对线最多、互动最热</p>
+    </div>
+
+    <!-- 详情抽屉 -->
+    <div v-if="graphDetail" class="fixed inset-0 z-[70]">
+      <div class="absolute inset-0" style="background: rgba(0,0,0,0.35); backdrop-filter: blur(2px)" @click="closeDetail"></div>
+      <div class="absolute right-0 top-0 h-full w-[440px] max-w-[94vw] flex flex-col animate-card"
+        style="background: var(--surface); box-shadow: -16px 0 48px rgba(0,0,0,0.2)">
+        <!-- 抽屉头 -->
+        <div class="p-4 flex items-center gap-3 shrink-0" style="border-bottom: 1px solid var(--separator)">
+          <div class="w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0"
+            :style="{ background: graphDetail.isMain ? 'linear-gradient(135deg, #bf5af2, #0a84ff)' : 'linear-gradient(135deg, #ff9f0a, #ff375f)' }">
+            {{ graphDetail.name.charAt(0) }}
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[15px] font-bold truncate flex items-center gap-1.5" style="color: var(--text-primary)">
+              {{ graphDetail.name }}
+              <span v-if="graphDetail.isMain" class="apple-chip purple" style="font-size:10px">本人</span>
+            </div>
+            <div class="text-[11px] mt-0.5 truncate" style="color: var(--text-tertiary)">
+              <template v-if="graphDetail.isMain">共 {{ graphDetail.count }} 条回帖 · 获亮 {{ graphDetail.light_sum }}</template>
+              <template v-else>
+                被引用 {{ graphDetail.count }} 次 · 共 {{ graphDetail.light_sum }} 亮
+                <template v-if="graphDetail.count > 0"> · 平均 {{ (graphDetail.light_sum / graphDetail.count).toFixed(1) }} 亮/次</template>
+                <template v-if="graphDetail.first_time"> · {{ graphDetail.first_time }} ~ {{ graphDetail.last_time }}</template>
+              </template>
+            </div>
+          </div>
+          <button @click="closeDetail" class="apple-btn apple-btn-gray !p-0 w-8 h-8 !rounded-full shrink-0">
+            <svg class="w-4 h-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 抽屉体 -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+          <p v-if="graphDetailLoading" class="text-sm text-center py-8" style="color: var(--text-tertiary)">
+            <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span> 加载互动记录…
+          </p>
+
+          <!-- 本人节点：历史最热回帖 -->
+          <template v-if="graphDetail.isMain && graphDetail.top_quotes">
+            <p class="text-xs font-medium" style="color: var(--text-tertiary)">历史最热回帖 TOP {{ graphDetail.top_quotes.length }}</p>
+            <div v-for="(q, qi) in graphDetail.top_quotes" :key="qi" class="p-3.5 rounded-2xl border" style="background: var(--fill); border-color: var(--separator)">
+              <div class="text-sm leading-relaxed" style="color: var(--text-primary)">{{ q.content }}</div>
+              <div v-if="q.quote_content" class="mt-2 px-3 py-2 rounded-xl text-xs leading-relaxed" style="background: var(--surface); color: var(--text-tertiary)">↩ {{ q.quote_content }}</div>
+              <div class="mt-2 flex items-center gap-2 text-[11px]" style="color: var(--text-quaternary)">
+                <span v-if="q.light_count > 0" class="apple-chip orange" style="font-size:10px">亮 {{ q.light_count }}</span>
+                <span>{{ q.format_time }}</span>
+                <span class="truncate">{{ q.title }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- 目标节点：全部互动回帖 -->
+          <template v-if="!graphDetail.isMain && !graphDetailLoading">
+            <div v-if="!graphDetail.replies.length" class="text-sm text-center py-8" style="color: var(--text-tertiary)">暂无互动记录</div>
+            <div v-for="(r, ri) in graphDetail.replies" :key="ri" class="p-3.5 rounded-2xl border" style="background: var(--fill); border-color: var(--separator)">
+              <div class="text-sm leading-relaxed" style="color: var(--text-primary)">{{ r.content }}</div>
+              <div v-if="r.quote_content" class="mt-2 px-3 py-2 rounded-xl text-xs leading-relaxed" style="background: var(--surface); color: var(--text-tertiary)">
+                <span style="color: var(--purple, #bf5af2)">@{{ graphDetail.name }}：</span>{{ r.quote_content }}
+              </div>
+              <div class="mt-2 flex items-center gap-2 text-[11px]" style="color: var(--text-quaternary)">
+                <span v-if="r.light_count > 0" class="apple-chip orange" style="font-size:10px">亮 {{ r.light_count }}</span>
+                <span>{{ r.format_time || '' }}</span>
+                <a :href="'https://bbs.hupu.com/' + r.tid + '.html?pid=' + r.pid" target="_blank" rel="noopener" class="ml-auto shrink-0 hover:underline" style="color: var(--blue)">原帖 ↗</a>
+              </div>
+              <div v-if="r.title" class="mt-1 text-[11px] truncate" style="color: var(--text-quaternary)">{{ r.title }}</div>
+            </div>
+          </template>
+        </div>
+
+        <!-- 抽屉底：加载更多 -->
+        <div v-if="!graphDetail.isMain && !graphDetailLoading && graphDetail.total > graphDetail.replies.length"
+          class="p-3 shrink-0" style="border-top: 1px solid var(--separator)">
+          <button @click="loadMoreDetail" :disabled="graphDetailMoreLoading" class="apple-btn apple-btn-gray w-full">
+            {{ graphDetailMoreLoading ? '加载中…' : `加载更多（${graphDetail.replies.length} / ${graphDetail.total}）` }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Empty State ── -->
-  <div v-if="activeTab!=='monitor' && activeTab!=='ghost' && !monitorLoading && !loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
+  <div v-if="activeTab!=='monitor' && activeTab!=='ghost' && activeTab!=='graph' && !monitorLoading && !loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
     class="max-w-6xl mx-auto px-4 mt-28 text-center">
     <div class="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center" style="background: var(--fill)">
       <svg class="w-8 h-8" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1459,6 +1594,6 @@
   </div>
 </div>
 
-  <script type="module" src="js/app.js?v=3"></script>
+  <script type="module" src="js/app.js?v=12"></script>
 </body>
 </html>

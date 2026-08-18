@@ -11,6 +11,7 @@ import { setupPostsTab } from './components/PostsTab.js';
 import { setupQaTab } from './components/QaTab.js';
 import { setupMonitorTab } from './components/MonitorTab.js';
 import { setupGhostTab } from './components/GhostTab.js';
+import { setupInteractionGraphTab } from './components/InteractionGraphTab.js?v=12';
 import * as api from './utils/api.js';
 import { fmtTokens, renderMarkdown } from './utils/helpers.js';
 
@@ -31,6 +32,7 @@ createApp({
     const qa = setupQaTab(store);
     const monitor = setupMonitorTab(store);
     const ghost = setupGhostTab(store);
+    const graphTab = setupInteractionGraphTab(store);
 
     // ── Watch darkMode → re-render charts ──
     watch(store.darkMode, async () => {
@@ -49,6 +51,9 @@ createApp({
         monitor.renderBrandChart();
         monitor.renderModelChart();
       }
+      if (store.graphData.value) {
+        graphTab.renderGraph();
+      }
     });
 
     // ── Watch activeTab → render charts when switching ──
@@ -65,6 +70,8 @@ createApp({
         monitor.renderDailyChart();
         monitor.renderBrandChart();
         monitor.renderModelChart();
+      } else if (newTab === 'graph' && store.graphData.value) {
+        graphTab.renderGraph();
       }
     });
 
@@ -83,6 +90,8 @@ createApp({
       store.profileCard.value = null;
       store.profileError.value = '';
       store.profileCached.value = false;
+      // Graph: 切换用户时清空图谱数据
+      graphTab.reset();
     });
 
     // ── Watch threshold → re-fetch similarity ──
@@ -193,6 +202,7 @@ createApp({
       ...qa,
       ...monitor,
       ...ghost,
+      ...graphTab,
       ...fetchSection,
       saveConfig, skipAiKeySetup, checkConfigStatus,
       fetchEuids, exportImage,

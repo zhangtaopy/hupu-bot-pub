@@ -182,6 +182,14 @@ export function createStore() {
   const profileCached = ref(false);
   const profileStage = ref('');
 
+  // ── Interaction graph state (互动图谱) ──
+  const graphLoading = ref(false);
+  const graphError = ref('');
+  const graphData = ref(null);       // { main_username, total_interactions, total_targets, shown_targets, nodes, edges }
+  const graphDetail = ref(null);     // { name, isMain, total, replies, offset }
+  const graphDetailLoading = ref(false);
+  const graphDetailMoreLoading = ref(false);
+
   // ── Computed ──
   const sortedPosts = computed(() =>
     [...postsData.value].sort((a, b) => b.create_time - a.create_time)
@@ -258,6 +266,7 @@ export function createStore() {
     qaReplyCount, qaPostCount, qaSubTab, suggestedQuestions, sortedPosts,
     ghostMode, ghostInput, ghostHistory, ghostLoading, ghostError, ghostUsername,
     profileCard, profileLoading, profileError, profileCached, profileStage,
+    graphLoading, graphError, graphData, graphDetail, graphDetailLoading, graphDetailMoreLoading,
     hasPersonalInfo, toggleGroup, selectEuid, onEuidFocus, onEuidBlur, clearDisplayData,
     chartTextColor, chartGridColor,
     chartInstances, timers,

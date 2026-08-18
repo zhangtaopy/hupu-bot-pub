@@ -936,3 +936,36 @@ pub async fn ghost_chat(
         .body(Body::from_stream(stream))
         .unwrap()
 }
+
+// ── 互动图谱（社交图） ──
+
+/// GET /api/interactions/graph?euid=xxx — 基于引用关系构建互动图谱（节点 + 边）。
+pub async fn get_interaction_graph(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    Query(params): Query<InteractionGraphQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let conn = crate::db::open_db(&state.db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let graph = crate::db::query_interaction_graph(&conn, &params.euid, params.max_nodes)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({
+        "main_username": graph.main_username,
+        "total_interactions": graph.total_interactions,
+        "total_targets": graph.total_targets,
+        "shown_targets": graph.shown_targets,
+        "nodes": graph.nodes,
+        "edges": graph.edges,
+    })))
+}
+
+/// GET /api/interactions/detail?euid=xxx&target=username — 分页获取与指定对象的全部互动回帖。
+pub async fn get_interaction_detail(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    Query(params): Query<InteractionDetailQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let conn = crate::db::open_db(&state.db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let limit = params.limit.clamp(1, 200);
+    let (total, replies) = crate::db::query_interaction_detail(
+        &conn, &params.euid, &params.target, limit, params.offset,
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({ "total": total, "replies": replies })))
+}

@@ -294,6 +294,244 @@ pub fn count_replies(conn: &Connection, euid: Option<&str>) -> Result<i64> {
     Ok(count)
 }
 
+// ── 互动图谱（社交图） ──
+//
+// 基于 replies 表的 quote_* 字段构建"谁引用了谁"的单向关系图：
+// 中心节点 = 被分析用户，边 = 该用户引用某人的回复关系，权重 = 引用次数。
+// 无需额外抓取，数据全部来自已入库的回帖记录。
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InteractionQuote {
+    pub content: String,
+    pub light_count: i64,
+    pub format_time: String,
+    pub title: String,
+    pub quote_content: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InteractionNode {
+    pub name: String,
+    pub is_main: bool,
+    pub count: i64,
+    pub light_sum: i64,
+    pub first_time: String,
+    pub last_time: String,
+    pub top_quotes: Vec<InteractionQuote>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InteractionEdge {
+    pub source: String,
+    pub target: String,
+    pub count: i64,
+    pub light_sum: i64,
+    pub top_quotes: Vec<InteractionQuote>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InteractionGraph {
+    pub main_username: String,
+    pub total_interactions: i64,
+    pub total_targets: i64,
+    pub shown_targets: usize,
+    pub nodes: Vec<InteractionNode>,
+    pub edges: Vec<InteractionEdge>,
+}
+
+fn fmt_ts(ts: i64) -> String {
+    chrono::DateTime::from_timestamp(ts, 0)
+        .map(|dt| dt.format("%Y-%m-%d").to_string())
+        .unwrap_or_default()
+}
+
+/// 不是真实用户、而是系统统称的引用对象，图谱中过滤掉
+const COLLECTIVE_NAMES: [&str; 1] = ["小黑屋住户"];
+
+/// 聚合某用户的引用互动数据，返回图谱（节点 + 边）。
+/// `max_nodes` 限制展示的互动对象数量（按互动次数降序截断）。
+pub fn query_interaction_graph(
+    conn: &Connection,
+    euid: &str,
+    max_nodes: usize,
+) -> Result<InteractionGraph> {
+    let main_username = get_username(conn, euid)?.unwrap_or_else(|| "未知用户".to_string());
+
+    // 主节点统计：总回帖、总点亮、时间范围
+    let (main_count, main_light_sum, main_first, main_last): (i64, i64, Option<i64>, Option<i64>) =
+        conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(light_count), 0), MIN(create_time), MAX(create_time)
+             FROM replies WHERE euid = ?1",
+            rusqlite::params![euid],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+
+    // 主节点最热回帖（tooltip 用）
+    let mut stmt = conn.prepare(
+        "SELECT content, light_count, format_time, title, quote_content
+         FROM replies WHERE euid = ?1
+         ORDER BY light_count DESC, create_time DESC LIMIT 3",
+    )?;
+    let main_top: Vec<InteractionQuote> = stmt
+        .query_map(rusqlite::params![euid], |row| {
+            Ok(InteractionQuote {
+                content: row.get(0)?,
+                light_count: row.get(1)?,
+                format_time: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                title: row.get(3)?,
+                quote_content: row.get(4)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // 全部引用关系（单次查询，内存聚合）
+    struct Agg {
+        count: i64,
+        light_sum: i64,
+        first: i64,
+        last: i64,
+        quotes: Vec<InteractionQuote>,
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT quote_username, content, light_count, format_time, title, quote_content, create_time
+         FROM replies
+         WHERE euid = ?1 AND quote_username IS NOT NULL AND quote_username != ''
+         ORDER BY create_time DESC",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![euid], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            InteractionQuote {
+                content: row.get(1)?,
+                light_count: row.get(2)?,
+                format_time: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                title: row.get(4)?,
+                quote_content: row.get(5)?,
+            },
+            row.get::<_, i64>(6)?,
+        ))
+    })?;
+
+    let mut map: HashMap<String, Agg> = HashMap::new();
+    let mut total_interactions: i64 = 0;
+    for row in rows {
+        let (target, quote, ts) = row?;
+        // 跳过引用自己的情况（自环）和系统统称（如小黑屋住户）
+        if target == main_username || COLLECTIVE_NAMES.contains(&target.as_str()) {
+            continue;
+        }
+        total_interactions += 1;
+        let agg = map.entry(target).or_insert(Agg {
+            count: 0,
+            light_sum: 0,
+            first: ts,
+            last: ts,
+            quotes: Vec::new(),
+        });
+        agg.count += 1;
+        agg.light_sum += quote.light_count;
+        if ts < agg.first {
+            agg.first = ts;
+        }
+        if ts > agg.last {
+            agg.last = ts;
+        }
+        agg.quotes.push(quote);
+    }
+
+    // 按互动次数排序，截断前 max_nodes 名
+    let mut targets: Vec<(String, Agg)> = map.into_iter().collect();
+    targets.sort_by(|a, b| b.1.count.cmp(&a.1.count).then(b.1.light_sum.cmp(&a.1.light_sum)));
+    let total_targets = targets.len() as i64;
+    targets.truncate(max_nodes);
+
+    // 每个目标的 top quotes 按点亮数取前 3
+    let mut nodes = Vec::with_capacity(targets.len() + 1);
+    let mut edges = Vec::with_capacity(targets.len());
+    for (name, mut agg) in targets {
+        agg.quotes
+            .sort_by(|a, b| b.light_count.cmp(&a.light_count).then(b.format_time.cmp(&a.format_time)));
+        agg.quotes.truncate(3);
+        let node = InteractionNode {
+            first_time: fmt_ts(agg.first),
+            last_time: fmt_ts(agg.last),
+            count: agg.count,
+            light_sum: agg.light_sum,
+            top_quotes: agg.quotes.clone(),
+            name: name.clone(),
+            is_main: false,
+        };
+        edges.push(InteractionEdge {
+            source: main_username.clone(),
+            target: name,
+            count: agg.count,
+            light_sum: agg.light_sum,
+            top_quotes: agg.quotes,
+        });
+        nodes.push(node);
+    }
+
+    // 主节点
+    nodes.push(InteractionNode {
+        name: main_username.clone(),
+        is_main: true,
+        count: main_count,
+        light_sum: main_light_sum,
+        first_time: main_first.map(fmt_ts).unwrap_or_default(),
+        last_time: main_last.map(fmt_ts).unwrap_or_default(),
+        top_quotes: main_top,
+    });
+
+    Ok(InteractionGraph {
+        main_username,
+        total_interactions,
+        total_targets,
+        shown_targets: edges.len(),
+        nodes,
+        edges,
+    })
+}
+
+/// 分页查询某用户与指定对象的全部互动回帖（点击节点后的详情面板）。
+/// 返回（总数, 当前页数据）。
+pub fn query_interaction_detail(
+    conn: &Connection,
+    euid: &str,
+    target: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<(i64, Vec<ReplyRow>)> {
+    let total: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM replies
+         WHERE euid = ?1 AND quote_username = ?2",
+        rusqlite::params![euid, target],
+        |row| row.get(0),
+    )?;
+
+    let mut stmt = conn.prepare(
+        "SELECT pid, tid, puid, euid, username, content,
+                quote, quote_pid, quote_tid, quote_puid, quote_euid,
+                quote_username, quote_content, quote_create_time,
+                create_time, light_count, unlight_count,
+                title, topic_id, topic_name, format_time
+         FROM replies
+         WHERE euid = ?1 AND quote_username = ?2
+         ORDER BY create_time DESC LIMIT ?3 OFFSET ?4",
+    )?;
+    let rows = stmt.query_map(
+        rusqlite::params![euid, target, limit as i64, offset as i64],
+        row_to_reply,
+    )?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok((total, result))
+}
+
 // ── Posts ──
 
 pub fn upsert_posts(conn: &Connection, posts: &[PostRow]) -> Result<usize> {
@@ -1216,6 +1454,127 @@ pub fn get_monitor_topics(conn: &Connection) -> Result<Vec<serde_json::Value>> {
         }))
     })?.filter_map(|r| r.ok()).collect();
     Ok(rows)
+}
+
+#[cfg(test)]
+mod interaction_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn in_memory_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+        create_tables(&conn).unwrap();
+        conn
+    }
+
+    fn quoted_reply(pid: i64, target: &str, light: i64, ts: i64) -> ReplyRow {
+        ReplyRow {
+            pid,
+            tid: 100 + pid,
+            puid: Some(1000),
+            euid: Some("me".into()),
+            username: "我".into(),
+            content: format!("回复{}的内容{}", target, pid),
+            quote: 1,
+            quote_pid: Some(pid * 10),
+            quote_tid: Some(100 + pid),
+            quote_puid: Some(2000),
+            quote_euid: None,
+            quote_username: Some(target.into()),
+            quote_content: Some(format!("{}的原文", target)),
+            quote_create_time: Some(ts - 100),
+            create_time: ts,
+            light_count: light,
+            unlight_count: 0,
+            title: "帖子".into(),
+            topic_id: None,
+            topic_name: None,
+            format_time: Some("2024-01-01 12:00".into()),
+        }
+    }
+
+    #[test]
+    fn interaction_graph_aggregates_by_target() {
+        let conn = in_memory_conn();
+        let replies = vec![
+            quoted_reply(1, "甲", 10, 1700000100),
+            quoted_reply(2, "甲", 30, 1700000200),
+            quoted_reply(3, "甲", 5, 1700000300),
+            quoted_reply(4, "乙", 99, 1700000400),
+            quoted_reply(5, "我", 1, 1700000500), // 引用自己 → 跳过
+            quoted_reply(6, "小黑屋住户", 20, 1700000600), // 系统统称 → 跳过
+        ];
+        upsert_replies(&conn, &replies).unwrap();
+
+        let g = query_interaction_graph(&conn, "me", 10).unwrap();
+        assert_eq!(g.main_username, "我");
+        assert_eq!(g.total_interactions, 4);
+        assert_eq!(g.total_targets, 2);
+        assert_eq!(g.edges.len(), 2);
+
+        // 按互动次数排序：甲在前
+        let a = &g.nodes[0];
+        assert_eq!(a.name, "甲");
+        assert_eq!(a.count, 3);
+        assert_eq!(a.light_sum, 45);
+        assert_eq!(a.is_main, false);
+        // top quotes 按点亮数取前 3：30, 10, 5
+        assert_eq!(a.top_quotes.len(), 3);
+        assert_eq!(a.top_quotes[0].light_count, 30);
+
+        let b = &g.nodes[1];
+        assert_eq!(b.name, "乙");
+        assert_eq!(b.count, 1);
+        assert_eq!(b.light_sum, 99);
+
+        // 主节点（统计所有回帖，包括被过滤掉的统称引用）
+        let main = g.nodes.iter().find(|n| n.is_main).unwrap();
+        assert_eq!(main.count, 6);
+        assert_eq!(main.light_sum, 165);
+
+        // 边方向
+        let edge = &g.edges[0];
+        assert_eq!(edge.source, "我");
+        assert_eq!(edge.target, "甲");
+        assert_eq!(edge.count, 3);
+    }
+
+    #[test]
+    fn interaction_graph_truncates_nodes() {
+        let conn = in_memory_conn();
+        let mut replies = Vec::new();
+        for i in 1..=5 {
+            replies.push(quoted_reply(i, &format!("用户{}", i), i, 1700000000 + i));
+        }
+        upsert_replies(&conn, &replies).unwrap();
+
+        let g = query_interaction_graph(&conn, "me", 3).unwrap();
+        assert_eq!(g.total_targets, 5);
+        assert_eq!(g.shown_targets, 3);
+        assert_eq!(g.edges.len(), 3);
+        assert_eq!(g.nodes.len(), 4); // 3 目标 + 主节点
+    }
+
+    #[test]
+    fn interaction_detail_paginates() {
+        let conn = in_memory_conn();
+        let mut replies = Vec::new();
+        for i in 1..=5 {
+            replies.push(quoted_reply(i, "甲", i, 1700000000 + i));
+        }
+        upsert_replies(&conn, &replies).unwrap();
+
+        let (total, page) = query_interaction_detail(&conn, "me", "甲", 2, 0).unwrap();
+        assert_eq!(total, 5);
+        assert_eq!(page.len(), 2);
+        // 按时间倒序：最新在前
+        assert_eq!(page[0].pid, 5);
+
+        let (_, page2) = query_interaction_detail(&conn, "me", "甲", 2, 4).unwrap();
+        assert_eq!(page2.len(), 1);
+        assert_eq!(page2[0].pid, 1);
+    }
 }
 
 #[cfg(test)]

@@ -7,6 +7,35 @@ pub struct EuidQuery {
     pub euid: String,
 }
 
+// ── 互动图谱（社交图） ──
+
+#[derive(Deserialize)]
+pub struct InteractionGraphQuery {
+    pub euid: String,
+    /// 最多展示多少个互动对象节点
+    #[serde(default = "default_max_nodes")]
+    pub max_nodes: usize,
+}
+
+fn default_max_nodes() -> usize {
+    60
+}
+
+#[derive(Deserialize)]
+pub struct InteractionDetailQuery {
+    pub euid: String,
+    /// 互动对象用户名
+    pub target: String,
+    #[serde(default = "default_detail_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+fn default_detail_limit() -> usize {
+    20
+}
+
 #[derive(Deserialize)]
 pub struct AnalyzeQuery {
     pub euid: String,
