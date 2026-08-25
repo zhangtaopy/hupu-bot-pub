@@ -16,8 +16,9 @@
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.0.2/wordcloud2.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=4">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/modern-screenshot@4/dist/index.js"></script>
 </head>
 <body class="min-h-screen">
 
@@ -1359,8 +1360,15 @@
           {{ profileStage }}
         </div>
         <div v-if="profileCard" class="mt-5">
+          <!-- 操作栏（位于卡片外，不会被截进图） -->
+          <div class="flex items-center justify-end mb-2">
+            <button @click="exportProfileCard" class="apple-btn apple-btn-tinted apple-btn-sm">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 3v13m0 0l-4-4m4 4l4-4"/></svg>
+              一键保存图片
+            </button>
+          </div>
           <!-- 成分卡片主体 -->
-          <div class="rounded-2xl overflow-hidden border animate-card" style="border-color: var(--separator); box-shadow: 0 8px 30px rgba(0,0,0,0.08)">
+          <div id="profile-card-capture" class="rounded-2xl overflow-hidden border animate-card" style="border-color: var(--separator); box-shadow: 0 8px 30px rgba(0,0,0,0.08)">
             <!-- 渐变头部 -->
             <div class="px-5 pt-6 pb-5" style="background: linear-gradient(135deg, #2c2c2e 0%, #1d1d1f 60%, #3a3a3c 100%); position: relative; overflow: hidden">
               <div style="position:absolute; right:-30px; top:-30px; width:140px; height:140px; border-radius:50%; background: radial-gradient(circle, rgba(255,159,10,0.25), transparent 70%)"></div>
@@ -1370,10 +1378,10 @@
                   <div class="text-white text-xl font-bold truncate">{{ profileCard.username || euid }}</div>
                   <div class="text-white/50 text-xs font-mono mt-0.5">{{ euid }}</div>
                   <div class="mt-2 flex flex-wrap gap-1.5">
-                    <span v-if="profileCard.fan_identity" class="text-[11px] px-2.5 py-0.5 rounded-full font-medium" style="background: rgba(255,255,255,0.15); color: #ffd60a">{{ profileCard.fan_identity }}</span>
+                    <span v-if="profileCard.fan_identity" class="text-[11px] px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap" style="background: rgba(255,255,255,0.15); color: #ffd60a">{{ profileCard.fan_identity }}</span>
                   </div>
                 </div>
-                <div class="text-right shrink-0">
+                <div class="text-right shrink-0 whitespace-nowrap">
                   <div class="text-white text-lg font-semibold">{{ profileCard.main_forum || '—' }}</div>
                   <div class="text-white/45 text-[11px] mt-0.5">主混迹板块</div>
                 </div>
@@ -1442,8 +1450,8 @@
             </div>
             <!-- 底部水印 -->
             <div class="px-5 py-2.5 flex items-center justify-between" style="background: var(--fill); border-top: 1px solid var(--separator)">
-              <span class="text-[11px] font-medium" style="color: var(--text-tertiary)">🃏 HUPU 成分卡</span>
-              <span class="text-[11px]" style="color: var(--text-quaternary)">AI 生成 · 仅供娱乐</span>
+              <span class="text-[11px] font-medium whitespace-nowrap" style="color: var(--text-tertiary)">🃏 HUPU 成分卡</span>
+              <span class="text-[11px] whitespace-nowrap" style="color: var(--text-quaternary)">AI 生成 · 仅供娱乐</span>
             </div>
           </div>
         </div>
@@ -1594,6 +1602,6 @@
   </div>
 </div>
 
-  <script type="module" src="js/app.js?v=12"></script>
+  <script type="module" src="js/app.js?v=13"></script>
 </body>
 </html>

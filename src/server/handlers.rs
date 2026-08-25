@@ -42,8 +42,10 @@ pub async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
     match Assets::get(asset_path) {
         Some(content) => {
             let mime = mime_type(asset_path);
+            // 前端文件迭代频繁，禁用启发式缓存避免浏览器使用过期 JS/CSS
             Response::builder()
                 .header(header::CONTENT_TYPE, mime)
+                .header(header::CACHE_CONTROL, "no-cache")
                 .body(Body::from(content.data.to_vec()))
                 .unwrap()
         }

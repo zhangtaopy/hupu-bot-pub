@@ -63,6 +63,42 @@ export function setupGhostTab(store) {
     }
   }
 
+  // ── 导出成分卡截图 ──
+  // 用 modern-screenshot（SVG foreignObject 方案，浏览器自身渲染），
+  // 保真度远高于 html2canvas 的 canvas 重绘方案，不会出现布局错乱
+  async function exportProfileCard() {
+    const ms = window.modernScreenshot;
+    if (!ms || typeof ms.domToBlob !== 'function') {
+      store.profileError.value = '截图库加载失败，请刷新页面重试';
+      return;
+    }
+    const el = document.getElementById('profile-card-capture');
+    if (!el || el.offsetHeight === 0) {
+      store.profileError.value = '暂无成分卡可保存';
+      return;
+    }
+    // 冻结入场动画：fadeUp 起始态 opacity:0 会带进克隆树导致空白。
+    // 动画播完后禁用无视觉影响故不恢复；恢复反而会触发动画重播闪烁。
+    el.style.animation = 'none';
+    try {
+      // 圆角外露出的底色用页面实际背景，避免与页面割裂
+      const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
+      const blob = await ms.domToBlob(el, { scale: 2, backgroundColor: bg });
+      if (!blob) throw new Error('生成图片为空');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const rawName = (store.profileCard.value && store.profileCard.value.username)
+        || store.euid.value || 'user';
+      const safeName = rawName.replace(/[\\/:*?"<>|]/g, '_');
+      link.download = `hupu-成分卡-${safeName}.png`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      store.profileError.value = '保存图片失败: ' + (e.message || '未知错误');
+    }
+  }
+
   // ── 魂穿 ──
   function setGhostMode(mode) {
     if (store.ghostLoading.value) return;
@@ -153,5 +189,5 @@ export function setupGhostTab(store) {
     }
   }
 
-  return { ghostProfile, setGhostMode, ghostSend };
+  return { ghostProfile, exportProfileCard, setGhostMode, ghostSend };
 }
