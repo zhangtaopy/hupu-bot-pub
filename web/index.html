@@ -9,14 +9,28 @@
   <title>虎扑回帖分析</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: 'class' }
+    // 覆盖 fontFamily.sans：Tailwind preflight 的 html 字体用的就是 theme(fontFamily.sans)，
+    // 在这里统一为具体字体名（不要用 system-ui/-apple-system 等别名字体，
+    // 它们在 modern-screenshot 的 SVG foreignObject 截图渲染中解析不稳定，导致导出图换行错乱）。
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Segoe UI"', '"Helvetica Neue"', '"PingFang SC"',
+              '"Hiragino Sans GB"', '"Microsoft YaHei"',
+              '"Apple Color Emoji"', '"Segoe UI Emoji"', 'sans-serif'],
+          },
+        },
+      },
+    }
   </script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.0.2/wordcloud2.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/modern-screenshot@4/dist/index.js"></script>
 </head>
@@ -1602,6 +1616,6 @@
   </div>
 </div>
 
-  <script type="module" src="js/app.js?v=13"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -125,15 +125,16 @@ html.dark {
 [v-cloak] { display: none !important; }
 
 html {
-  /* 注意：不要使用 -apple-system / system-ui 等系统 UI 别名，且必须加 !important。
-     Tailwind CDN 运行时注入的 preflight 会把 html 字体覆盖为 ui-sans-serif, system-ui，
-     而 system-ui 这类别名在 modern-screenshot 的 SVG foreignObject 截图渲染中解析不稳定
-     （部分浏览器会回退到更宽的字体），与页面字体度量不一致，
-     导致成分卡导出图出现"尾部字被挤到下一行"的错乱换行。
-     这里统一改用具体字体名，保证页面渲染与导出截图字体一致。 */
-  font-family: "Helvetica Neue", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", "Segoe UI", "Arial", "Apple Color Emoji",
-    "Segoe UI Emoji", sans-serif !important;
+  /* 注意：不要使用 -apple-system / system-ui 等系统 UI 别名字体。
+     它们在 modern-screenshot 的 SVG foreignObject 截图渲染中解析不稳定
+     （部分浏览器会回退到更宽的字体），导致成分卡导出图"尾部字被挤到下一行"。
+     正式声明在 index.html 的 tailwind.config (theme.fontFamily.sans)，
+     preflight 注入的 html 字体即来自它；此处为 CDN 加载失败时的兜底，
+     两处字体栈必须保持一致。Segoe UI 放最前供 Windows 命中西文字形，
+     macOS 无此字体自动跳过。 */
+  font-family: "Segoe UI", "Helvetica Neue", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei",
+    "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

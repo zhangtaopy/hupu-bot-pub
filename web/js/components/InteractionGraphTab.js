@@ -406,7 +406,8 @@ export function setupInteractionGraphTab(store) {
 
       const fontSize = isMain ? 13 : (node.isTop || isHovered ? 11.5 : 10);
       const fontWeight = isMain || node.isTop || isHovered ? 'bold' : '500';
-      ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif`;
+      // 与 tailwind.config 的 fontFamily.sans 保持一致，保证全站字体统一
+      ctx.font = `${fontWeight} ${fontSize}px "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif`;
 
       const label = node.name;
       const metrics = ctx.measureText(label);

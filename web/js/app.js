@@ -10,8 +10,8 @@ import { setupRepliesTab } from './components/RepliesTab.js';
 import { setupPostsTab } from './components/PostsTab.js';
 import { setupQaTab } from './components/QaTab.js';
 import { setupMonitorTab } from './components/MonitorTab.js';
-import { setupGhostTab } from './components/GhostTab.js?v=13';
-import { setupInteractionGraphTab } from './components/InteractionGraphTab.js?v=12';
+import { setupGhostTab } from './components/GhostTab.js';
+import { setupInteractionGraphTab } from './components/InteractionGraphTab.js';
 import * as api from './utils/api.js';
 import { fmtTokens, renderMarkdown } from './utils/helpers.js';
 

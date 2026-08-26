@@ -83,7 +83,9 @@ export function setupGhostTab(store) {
     try {
       // 圆角外露出的底色用页面实际背景，避免与页面割裂
       const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
-      const blob = await ms.domToBlob(el, { scale: 2, backgroundColor: bg });
+      // 至少 2x，高分屏（3x）按设备像素比导出保证清晰度
+      const scale = Math.max(2, window.devicePixelRatio || 1);
+      const blob = await ms.domToBlob(el, { scale, backgroundColor: bg });
       if (!blob) throw new Error('生成图片为空');
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
