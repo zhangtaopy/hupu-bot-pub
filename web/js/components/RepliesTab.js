@@ -182,23 +182,29 @@ export function setupRepliesTab(store, charts, storeObj) {
     }
   }
 
-  async function aiAnalyze() {
+  /**
+   * AI 分析入口。
+   * @param {boolean} force  true = 全量重新分析（忽略增量游标，消耗较多额度）
+   */
+  async function aiAnalyze(force = false) {
     if (!store.euid.value.trim() || !store.stats.value) return;
 
-    if (store.aiResult.value) {
-      if (!confirm('该用户已有AI分析结果，是否重新分析？这将消耗 AI API 额度。')) return;
+    if (force) {
+      if (!confirm('将全量重新分析该用户的所有回帖，消耗较多 AI 额度，确认继续？')) return;
+    } else if (store.aiResult.value) {
+      // 默认走增量更新：只分析新抓取的回帖，消耗极少量额度
     }
 
     clearTimers();
     store.aiLoading.value = true;
     store.aiResult.value = null;
     store.error.value = '';
-    store.aiProgressPhase.value = 'AI分析准备中';
+    store.aiProgressPhase.value = force ? 'AI全量分析准备中' : 'AI增量更新准备中';
     store.aiProgressCurrent.value = 0;
     store.aiProgressTotal.value = 0;
 
     try {
-      const data = await api.startAiAnalysis(store.euid.value, store.userApiKeyParams());
+      const data = await api.startAiAnalysis(store.euid.value, store.userApiKeyParams(), force);
       if (data.status === 'error') {
         store.error.value = data.error || 'AI分析启动失败';
         store.aiLoading.value = false;

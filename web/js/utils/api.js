@@ -61,8 +61,11 @@ export async function fetchAnalysisProgress(euid, threshold) {
   return res.json();
 }
 
-export async function startAiAnalysis(euid, apiKeyParams) {
-  const res = await fetch(`/api/analyze/ai/start?euid=${encodeURIComponent(euid)}${apiKeyParams}`, { method: 'POST' });
+export async function startAiAnalysis(euid, apiKeyParams, force = false) {
+  const res = await fetch(
+    `/api/analyze/ai/start?euid=${encodeURIComponent(euid)}${apiKeyParams}${force ? '&force=true' : ''}`,
+    { method: 'POST' }
+  );
   return res.json();
 }
 
@@ -71,8 +74,11 @@ export async function fetchAiProgress(euid) {
   return res.json();
 }
 
-export async function startAiPostAnalysis(euid, apiKeyParams) {
-  const res = await fetch(`/api/posts/analyze/ai/start?euid=${encodeURIComponent(euid)}${apiKeyParams}`, { method: 'POST' });
+export async function startAiPostAnalysis(euid, apiKeyParams, force = false) {
+  const res = await fetch(
+    `/api/posts/analyze/ai/start?euid=${encodeURIComponent(euid)}${apiKeyParams}${force ? '&force=true' : ''}`,
+    { method: 'POST' }
+  );
   return res.json();
 }
 
@@ -81,13 +87,13 @@ export async function fetchAiPostProgress(euid) {
   return res.json();
 }
 
-export async function startFetchReplies(euid, maxPages, pageSize, cookieParams) {
-  const res = await fetch(`/api/replies/fetch?euid=${encodeURIComponent(euid)}&max_pages=${maxPages}&page_size=${pageSize}${cookieParams}`, { method: 'POST' });
+export async function startFetchReplies(euid, maxPages, pageSize, cookieParams, incremental = true) {
+  const res = await fetch(`/api/replies/fetch?euid=${encodeURIComponent(euid)}&max_pages=${maxPages}&page_size=${pageSize}&incremental=${incremental}${cookieParams}`, { method: 'POST' });
   return res.json();
 }
 
-export async function startFetchPosts(euid, maxPages, cookieParams) {
-  const res = await fetch(`/api/posts/fetch?euid=${encodeURIComponent(euid)}&max_pages=${maxPages}${cookieParams}`, { method: 'POST' });
+export async function startFetchPosts(euid, maxPages, cookieParams, incremental = true) {
+  const res = await fetch(`/api/posts/fetch?euid=${encodeURIComponent(euid)}&max_pages=${maxPages}&incremental=${incremental}${cookieParams}`, { method: 'POST' });
   return res.json();
 }
 

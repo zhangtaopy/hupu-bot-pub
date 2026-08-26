@@ -156,6 +156,10 @@ enum Commands {
         #[arg(short = 's', long, default_value = "10")]
         page_size: u32,
 
+        /// 增量模式：只爬取尚未入库的回帖，遇到整页已存在即停止
+        #[arg(long)]
+        incremental: bool,
+
         /// 输出格式: table, json, simple
         #[arg(short = 'f', long, default_value = "table")]
         format: String,
@@ -170,6 +174,10 @@ enum Commands {
         /// 最大获取页数（0=自动获取全部）
         #[arg(short = 'p', long, default_value = "0")]
         max_pages: u32,
+
+        /// 增量模式：只爬取尚未入库的发帖，遇到整页已存在即停止
+        #[arg(long)]
+        incremental: bool,
 
         /// 输出格式: table, json, simple
         #[arg(short = 'f', long, default_value = "table")]
@@ -322,15 +330,21 @@ async fn main() -> Result<()> {
                 _ => analyze::format_groups_simple(&groups, all_replies.len()),
             }
         }
-        Commands::Replies { euid, max_pages, page_size, format } => {
+        Commands::Replies { euid, max_pages, page_size, incremental, format } => {
             let cfg = config::get();
             let client = HupuClient::new(&cfg.cookie)?;
             let db_path = std::path::Path::new("hupu.db");
             let conn = db::open_db(db_path)?;
 
-            let result = replies::fetch_replies_paginated(
-                &client, &euid, max_pages, page_size, &conn,
-            ).await?;
+            let result = if incremental {
+                replies::fetch_replies_incremental(
+                    &client, &euid, max_pages, page_size, &conn,
+                ).await?
+            } else {
+                replies::fetch_replies_paginated(
+                    &client, &euid, max_pages, page_size, &conn,
+                ).await?
+            };
 
             let stored = db::query_replies(&conn, Some(&euid), result.total_fetched, 0)?;
 
@@ -340,18 +354,26 @@ async fn main() -> Result<()> {
                 _ => replies::format_table(&stored),
             }
         }
-        Commands::Posts { euid, max_pages, format } => {
+        Commands::Posts { euid, max_pages, incremental, format } => {
             let cfg = config::get();
             let client = HupuClient::new(&cfg.cookie)?;
             let db_path = std::path::Path::new("hupu.db");
             let conn = db::open_db(db_path)?;
 
-            let result = posts::fetch_posts_paginated(
-                &client, &euid, max_pages,
-            ).await?;
-
-            let count = result.len();
-            db::upsert_posts(&conn, &result)?;
+            let count = if incremental {
+                // 增量模式：函数内部逐页判重并入库，返回(新增行数, 页数)
+                let (new_count, _pages) = posts::fetch_posts_incremental(
+                    &client, &euid, max_pages, &conn,
+                ).await?;
+                new_count
+            } else {
+                let fetched = posts::fetch_posts_paginated(
+                    &client, &euid, max_pages,
+                ).await?;
+                let n = fetched.len();
+                db::upsert_posts(&conn, &fetched)?;
+                n
+            };
             let stored = db::query_posts(&conn, Some(&euid), count, 0)?;
 
             match format.as_str() {

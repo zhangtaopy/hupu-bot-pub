@@ -54,6 +54,9 @@ pub struct AiAnalyzeQuery {
     pub api_key: Option<String>,
     #[serde(default)]
     pub provider: Option<String>,
+    /// 强制全量重新分析（忽略增量游标），默认 false = 增量优先
+    #[serde(default)]
+    pub force: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -72,6 +75,9 @@ pub struct AiPostAnalyzeQuery {
     pub api_key: Option<String>,
     #[serde(default)]
     pub provider: Option<String>,
+    /// 强制全量重新分析（忽略增量游标），默认 false = 增量优先
+    #[serde(default)]
+    pub force: Option<bool>,
 }
 
 fn default_limit() -> usize {
@@ -87,6 +93,9 @@ pub struct FetchRepliesQuery {
     pub page_size: u32,
     #[serde(default)]
     pub cookie: Option<String>,
+    /// 增量模式：只爬取尚未入库的回帖，遇到整页已存在即停止（默认 true，适合日常更新）
+    #[serde(default = "default_true")]
+    pub incremental: bool,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +105,13 @@ pub struct FetchPostsPagesQuery {
     pub max_pages: u32,
     #[serde(default)]
     pub cookie: Option<String>,
+    /// 增量模式：只爬取尚未入库的发帖，遇到整页已存在即停止（默认 true，适合日常更新）
+    #[serde(default = "default_true")]
+    pub incremental: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Deserialize)]

@@ -448,8 +448,11 @@ pub async fn start_ai_analysis(
 
     let state_clone = state.clone();
     let euid = params.euid.clone();
+    let force_full = params.force.unwrap_or(false);
     tokio::spawn(async move {
-        crate::services::ai::run_ai_analysis_background(state_clone, euid, Some(provider)).await;
+        crate::services::ai::run_ai_analysis_background(
+            state_clone, euid, Some(provider), force_full,
+        ).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -559,8 +562,11 @@ pub async fn start_ai_post_analysis(
 
     let state_clone = state.clone();
     let euid = params.euid.clone();
+    let force_full = params.force.unwrap_or(false);
     tokio::spawn(async move {
-        crate::services::ai::run_ai_post_analysis_background(state_clone, euid, Some(provider)).await;
+        crate::services::ai::run_ai_post_analysis_background(
+            state_clone, euid, Some(provider), force_full,
+        ).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -623,9 +629,11 @@ pub async fn fetch_replies_handler(
     let max_pages = params.max_pages;
     let page_size = params.page_size;
     let cookie_override = params.cookie.clone();
+    let incremental = params.incremental;
     tokio::spawn(async move {
-        crate::services::fetch::run_fetch_replies_background(state_clone, euid, max_pages, page_size, cookie_override)
-            .await;
+        crate::services::fetch::run_fetch_replies_background(
+            state_clone, euid, max_pages, page_size, cookie_override, incremental,
+        ).await;
     });
 
     Ok(Json(serde_json::json!({
@@ -656,8 +664,11 @@ pub async fn fetch_posts_handler(
     let euid = params.euid.clone();
     let max_pages = params.max_pages;
     let cookie_override = params.cookie.clone();
+    let incremental = params.incremental;
     tokio::spawn(async move {
-        crate::services::fetch::run_fetch_posts_background(state_clone, euid, max_pages, cookie_override).await;
+        crate::services::fetch::run_fetch_posts_background(
+            state_clone, euid, max_pages, cookie_override, incremental,
+        ).await;
     });
 
     Ok(Json(serde_json::json!({

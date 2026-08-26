@@ -127,6 +127,7 @@ export function createStore() {
   // ── Fetch data state ──
   const fetchRepliesCount = ref(0);
   const fetchPostsPages = ref(0);
+  const fetchIncremental = ref(true); // 增量模式：只抓取尚未入库的新数据，遇到已存在页自动停止
   const fetchLoading = ref(false);
   const fetchResult = ref(null);
   const fetchPostsProgressPhase = ref('');
@@ -255,7 +256,7 @@ export function createStore() {
     aiLoading, aiResult, aiProgressPhase, aiProgressCurrent, aiProgressTotal,
     hasSimilarityResults, similarityLoading, displayedEuid,
     showEuidDropdown, euidsList, filteredEuids,
-    fetchRepliesCount, fetchPostsPages, fetchLoading, fetchResult,
+    fetchRepliesCount, fetchPostsPages, fetchIncremental, fetchLoading, fetchResult,
     fetchPostsProgressPhase, fetchPostsProgressCurrent, fetchPostsProgressTotal,
     fetchPostsLoading, fetchRepliesProgressPhase, fetchRepliesProgressCurrent,
     fetchRepliesProgressTotal, fetchRepliesLoading,

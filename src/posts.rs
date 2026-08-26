@@ -116,6 +116,64 @@ pub async fn fetch_posts_paginated(
     Ok(all_posts)
 }
 
+/// 增量爬取发帖：只爬取尚未入库的数据，遇到「整页都是已存在的 tid」即停止。
+///
+/// 虎扑个人主页发帖按时间倒序排列，新数据必然出现在最前面的页；
+/// 从第 1 页逐页爬取，某页全部 tid 已存在时，后续页面只会更旧，可以停止。
+/// 已存在的行仍会 upsert（刷新互动数据），但不会再次触发 AI 分析
+/// （ai_analyzed 标记在 upsert 时保留）。返回 (新增行数, 实际爬取的页数)。
+pub async fn fetch_posts_incremental(
+    client: &HupuClient,
+    euid: &str,
+    max_pages: u32,
+    conn: &rusqlite::Connection,
+) -> Result<(usize, u32)> {
+    let mut total_new = 0usize;
+    let mut pages_fetched = 0u32;
+
+    let mut page = 1u32;
+    loop {
+        let posts = fetch_posts_page(client, euid, page).await?;
+
+        let count = posts.len();
+        if count == 0 {
+            break;
+        }
+
+        // 判重：本页有多少 tid 尚未入库
+        let tids: Vec<i64> = posts.iter().map(|p| p.tid).collect();
+        let existing = crate::db::existing_post_tids(conn, &tids)?;
+        let new_count = tids.iter().filter(|t| !existing.contains(t)).count();
+
+        if new_count == 0 {
+            // 整页都是已爬过的数据 → 后续页面只可能更旧 → 停止
+            println!("Page {}: 全部 {} 条已存在，增量爬取停止", page, count);
+            break;
+        }
+
+        crate::db::upsert_posts(conn, &posts)?;
+        total_new += new_count;
+        pages_fetched += 1;
+        println!(
+            "Page {}: fetched {} posts ({} new, new total: {})",
+            page, count, new_count, total_new
+        );
+
+        if (count as u32) < PAGE_SIZE || (max_pages > 0 && page >= max_pages) {
+            break;
+        }
+        page += 1;
+    }
+
+    if pages_fetched == 0 {
+        println!("没有需要增量爬取的新发帖（数据库已是最新）");
+    } else {
+        println!("增量爬取完成: {} 页, 新增 {} 条新发帖", pages_fetched, total_new);
+    }
+
+    Ok((total_new, pages_fetched))
+}
+
 pub async fn fetch_posts_page(
     client: &HupuClient,
     euid: &str,

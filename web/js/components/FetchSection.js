@@ -37,7 +37,8 @@ export function setupFetchSection(store) {
     api.startFetchPosts(
       store.euid.value,
       store.fetchPostsPages.value,
-      store.userCookieParams()
+      store.userCookieParams(),
+      store.fetchIncremental.value
     ).then(data => {
       if (data.status === 'error') postsError = data.error || '获取发帖失败';
     }).catch(e => {
@@ -71,7 +72,8 @@ export function setupFetchSection(store) {
         store.euid.value,
         maxPages,
         pageSize,
-        store.userCookieParams()
+        store.userCookieParams(),
+        store.fetchIncremental.value
       );
 
       if (repliesStartData.status === 'error') {

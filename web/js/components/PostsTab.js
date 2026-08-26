@@ -79,23 +79,27 @@ export function setupPostsTab(store, charts) {
     }
   }
 
-  async function aiPostAnalyze() {
+  /**
+   * AI 发帖分析入口。
+   * @param {boolean} force  true = 全量重新分析（忽略增量游标，消耗较多额度）
+   */
+  async function aiPostAnalyze(force = false) {
     if (!store.euid.value.trim() || !store.postsData.value.length) return;
 
-    if (store.aiPostResult.value) {
-      if (!confirm('该用户已有AI发帖分析结果，是否重新分析？这将消耗 AI API 额度。')) return;
+    if (force) {
+      if (!confirm('将全量重新分析该用户的所有发帖，消耗较多 AI 额度，确认继续？')) return;
     }
 
     if (store.timers.postAiPollTimer) clearTimeout(store.timers.postAiPollTimer);
     store.aiPostLoading.value = true;
     store.aiPostResult.value = null;
     store.error.value = '';
-    store.aiPostProgressPhase.value = 'AI发帖分析准备中';
+    store.aiPostProgressPhase.value = force ? 'AI全量发帖分析准备中' : 'AI增量发帖更新准备中';
     store.aiPostProgressCurrent.value = 0;
     store.aiPostProgressTotal.value = 0;
 
     try {
-      const data = await api.startAiPostAnalysis(store.euid.value, store.userApiKeyParams());
+      const data = await api.startAiPostAnalysis(store.euid.value, store.userApiKeyParams(), force);
       if (data.status === 'error') {
         store.error.value = data.error || 'AI发帖分析启动失败';
         store.aiPostLoading.value = false;

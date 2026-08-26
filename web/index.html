@@ -184,11 +184,17 @@
           {{ graphLoading ? '生成中…' : '生成图谱' }}
         </button>
 
-        <button v-if="activeTab==='replies'" @click="aiAnalyze" :disabled="aiLoading || !stats" class="apple-btn apple-btn-gray">
-          {{ aiLoading ? 'AI 分析中…' : 'AI 分析' }}
+        <button v-if="activeTab==='replies'" @click="aiAnalyze(false)" :disabled="aiLoading || !stats" class="apple-btn apple-btn-gray" :title="aiResult ? '只分析新入库的未分析回帖，已分析过的内容不重复分析' : 'AI 智能分析用户画像'">
+          {{ aiLoading ? 'AI 分析中…' : (aiResult ? '增量更新' : 'AI 分析') }}
         </button>
-        <button v-if="activeTab==='posts'" @click="aiPostAnalyze" :disabled="aiPostLoading || !postsData.length" class="apple-btn apple-btn-gray">
-          {{ aiPostLoading ? 'AI 分析帖子中…' : (aiPostResult ? '重新 AI 分析' : 'AI 分析发帖') }}
+        <button v-if="activeTab==='replies' && aiResult && !aiLoading" @click="aiAnalyze(true)" class="apple-btn apple-btn-sm apple-btn-gray" title="全量重新分析（含已分析过的内容），消耗较多额度">
+          重新分析
+        </button>
+        <button v-if="activeTab==='posts'" @click="aiPostAnalyze(false)" :disabled="aiPostLoading || !postsData.length" class="apple-btn apple-btn-gray" :title="aiPostResult ? '只分析新入库的未分析发帖，已分析过的内容不重复分析' : 'AI 智能分析发帖画像'">
+          {{ aiPostLoading ? 'AI 分析帖子中…' : (aiPostResult ? '增量更新' : 'AI 分析发帖') }}
+        </button>
+        <button v-if="activeTab==='posts' && aiPostResult && !aiPostLoading" @click="aiPostAnalyze(true)" class="apple-btn apple-btn-sm apple-btn-gray" title="全量重新分析（含已分析过的内容），消耗较多额度">
+          重新分析
         </button>
       </div>
 
@@ -255,8 +261,12 @@
           <option v-for="n in 30" :key="n" :value="n">{{ n }} 页</option>
         </select>
       </div>
+      <label class="flex items-center gap-1.5 cursor-pointer select-none" title="只获取尚未入库的新数据，遇到已存在数据自动停止；关闭则全量重新获取">
+        <input type="checkbox" v-model="fetchIncremental" class="w-3.5 h-3.5 accent-orange-500">
+        <span class="text-xs" style="color: var(--text-tertiary)">增量</span>
+      </label>
       <button @click="fetchData" :disabled="fetchLoading || !euid.trim()" class="apple-btn apple-btn-orange apple-btn-sm">
-        {{ fetchLoading ? '获取中…' : '开始获取' }}
+        {{ fetchLoading ? (fetchIncremental ? '增量获取中…' : '获取中…') : '开始获取' }}
       </button>
       <span v-if="fetchResult" class="text-[13px] font-medium" :style="{ color: fetchResult.success ? 'var(--green)' : 'var(--red)' }">
         {{ fetchResult.message }}

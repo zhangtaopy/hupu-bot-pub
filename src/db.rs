@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use crate::posts::PostRow;
@@ -166,6 +166,212 @@ fn create_tables(conn: &Connection) -> Result<()> {
             PRIMARY KEY (topic_id, snapshot_date)
         );",
     )?;
+
+    // Migration: analyzed_until 游标列（增量 AI 分析，added later）。
+    // 语义：该 euid 的缓存结果已覆盖到「fetched_at <= analyzed_until」的全部数据行。
+    add_analyzed_until_columns(conn)?;
+    // 对存量缓存回填游标：分析完成时刻（updated_at）之前已抓取的数据视为已覆盖，
+    // 纯 SQL 完成、不重新调用 AI；有批量失败记录的 euid 不回填（下次自动全量重试）。
+    backfill_analysis_cursors(conn)?;
+
+    // Migration: ai_analyzed 行级标记列（增量 AI 分析 v2，added later）。
+    // fetched_at 游标在「重复抓取会刷新所有行 fetched_at」时会把历史行误判为新数据，
+    // 因此改为行级标记：已分析的行打标，增量只取 ai_analyzed = 0 的行。
+    add_ai_analyzed_columns(conn)?;
+    // 对存量数据回填行标记：有过成功分析（analyzed_until > 0）且行在分析完成时刻
+    // （updated_at）之前已抓取 → 视为已分析。纯 SQL 完成、不重新调用 AI。
+    backfill_ai_analyzed_flags(conn)?;
+
+    Ok(())
+}
+
+/// Migration: 为 ai_analysis / ai_post_analysis 增加 analyzed_until 游标列（幂等）。
+fn add_analyzed_until_columns(conn: &Connection) -> Result<()> {
+    for table in ["ai_analysis", "ai_post_analysis"] {
+        let sql = format!("PRAGMA table_info({table})");
+        let has = conn
+            .prepare(&sql)?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(Result::ok)
+            .any(|name| name == "analyzed_until");
+        if !has {
+            conn.execute_batch(&format!(
+                "ALTER TABLE {table} ADD COLUMN analyzed_until INTEGER NOT NULL DEFAULT 0;"
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+/// Migration: 为 replies / posts 增加 ai_analyzed 行级标记列（幂等）。
+/// 1 = 该行内容已被 AI 分析覆盖；增量分析只处理 0 的行。
+fn add_ai_analyzed_columns(conn: &Connection) -> Result<()> {
+    for table in ["replies", "posts"] {
+        let sql = format!("PRAGMA table_info({table})");
+        let has = conn
+            .prepare(&sql)?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(Result::ok)
+            .any(|name| name == "ai_analyzed");
+        if !has {
+            conn.execute_batch(&format!(
+                "ALTER TABLE {table} ADD COLUMN ai_analyzed INTEGER NOT NULL DEFAULT 0;"
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+/// Migration: 对存量数据回填 ai_analyzed 行标记（幂等，重复执行无副作用）。
+///
+/// 判据：该用户有 AI 分析缓存（= 成功全量分析的产物）且无批次失败记录，
+/// 且行要么在分析完成时刻（updated_at）之前抓取，要么内容时间（create_time）
+/// 不晚于分析完成时刻。两者取 OR 是为了覆盖「缓存生成后全量重抓」的场景：
+/// 重抓会刷新所有行的 fetched_at，但 create_time 是内容发表时间、不会被刷新，
+/// 因此仍能证明这些老内容在分析时已存在；而缓存后新发表的内容
+/// （create_time > updated_at）保持未标记，由增量分析处理。
+/// 有批次失败记录的用户不标记，下次增量分析自动对其全量重试。
+fn backfill_ai_analyzed_flags(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "UPDATE replies SET ai_analyzed = 1
+         WHERE EXISTS (
+             SELECT 1 FROM ai_analysis a
+             WHERE a.euid = replies.euid
+               AND NOT EXISTS (
+                   SELECT 1 FROM ai_batch_errors e
+                   WHERE e.euid = a.euid AND e.batch_type = 'reply'
+               )
+               AND (replies.fetched_at <= a.updated_at
+                    OR replies.create_time <= a.updated_at)
+         );",
+    )?;
+    conn.execute_batch(
+        "UPDATE posts SET ai_analyzed = 1
+         WHERE EXISTS (
+             SELECT 1 FROM ai_post_analysis a
+             WHERE a.euid = posts.euid
+               AND NOT EXISTS (
+                   SELECT 1 FROM ai_batch_errors e
+                   WHERE e.euid = a.euid AND e.batch_type = 'post'
+               )
+               AND (posts.fetched_at <= a.updated_at
+                    OR posts.create_time <= a.updated_at)
+         );",
+    )?;
+    Ok(())
+}
+
+// ── 增量 AI 分析：行级未分析标记 ──
+
+/// 该用户尚未被 AI 分析的回复行数（增量分析的工作量）。
+pub fn count_unanalyzed_replies(conn: &Connection, euid: &str) -> Result<i64> {
+    let v: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM replies WHERE euid = ?1 AND ai_analyzed = 0",
+        rusqlite::params![euid],
+        |row| row.get(0),
+    )?;
+    Ok(v)
+}
+
+/// 该用户尚未被 AI 分析的发帖行数。
+pub fn count_unanalyzed_posts(conn: &Connection, euid: &str) -> Result<i64> {
+    let v: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM posts WHERE euid = ?1 AND ai_analyzed = 0",
+        rusqlite::params![euid],
+        |row| row.get(0),
+    )?;
+    Ok(v)
+}
+
+/// 取该用户尚未被 AI 分析的回帖（按 create_time 降序），供增量分析使用。
+pub fn query_unanalyzed_replies(conn: &Connection, euid: &str) -> Result<Vec<ReplyRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT pid, tid, puid, euid, username, content,
+                quote, quote_pid, quote_tid, quote_puid, quote_euid,
+                quote_username, quote_content, quote_create_time,
+                create_time, light_count, unlight_count,
+                title, topic_id, topic_name, format_time
+         FROM replies WHERE euid = ? AND ai_analyzed = 0
+         ORDER BY create_time DESC",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![euid], row_to_reply)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// 取该用户尚未被 AI 分析的发帖（按 create_time 降序），供增量分析使用。
+pub fn query_unanalyzed_posts(conn: &Connection, euid: &str) -> Result<Vec<PostRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT tid, euid, username, title, summary,
+                create_time, lastpost_time, replies, visits, lights,
+                recommend_num, forum_name, topic_name, topic_id,
+                total_pics, has_video, share_num, format_time
+         FROM posts WHERE euid = ? AND ai_analyzed = 0
+         ORDER BY create_time DESC",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![euid], row_to_post)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// 将该用户全部未标记回帖标记为已分析（全量分析或增量分析完成后调用）。
+pub fn mark_replies_analyzed(conn: &Connection, euid: &str) -> Result<usize> {
+    let n = conn.execute(
+        "UPDATE replies SET ai_analyzed = 1 WHERE euid = ?1 AND ai_analyzed = 0",
+        rusqlite::params![euid],
+    )?;
+    Ok(n)
+}
+
+/// 将该用户全部未标记发帖标记为已分析。
+pub fn mark_posts_analyzed(conn: &Connection, euid: &str) -> Result<usize> {
+    let n = conn.execute(
+        "UPDATE posts SET ai_analyzed = 1 WHERE euid = ?1 AND ai_analyzed = 0",
+        rusqlite::params![euid],
+    )?;
+    Ok(n)
+}
+
+/// Migration: 对存量 AI 分析缓存回填 analyzed_until 游标（幂等，重复执行无副作用）。
+///
+/// 回填值 = 「缓存保存时刻（updated_at）之前已抓取」的数据行的最大 fetched_at。
+/// 这样缓存生成之后新抓取的行（fetched_at > updated_at）不会被误标为已分析，
+/// 增量逻辑会自动识别它们；旧数据零 AI 调用完成标记。
+fn backfill_analysis_cursors(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "UPDATE ai_analysis
+         SET analyzed_until = COALESCE((
+             SELECT MAX(fetched_at) FROM replies
+             WHERE replies.euid = ai_analysis.euid
+               AND replies.fetched_at <= ai_analysis.updated_at
+         ), 0)
+         WHERE analyzed_until = 0
+           AND NOT EXISTS (
+               SELECT 1 FROM ai_batch_errors
+               WHERE ai_batch_errors.euid = ai_analysis.euid
+                 AND ai_batch_errors.batch_type = 'reply'
+           );",
+    )?;
+    conn.execute_batch(
+        "UPDATE ai_post_analysis
+         SET analyzed_until = COALESCE((
+             SELECT MAX(fetched_at) FROM posts
+             WHERE posts.euid = ai_post_analysis.euid
+               AND posts.fetched_at <= ai_post_analysis.updated_at
+         ), 0)
+         WHERE analyzed_until = 0
+           AND NOT EXISTS (
+               SELECT 1 FROM ai_batch_errors
+               WHERE ai_batch_errors.euid = ai_post_analysis.euid
+                 AND ai_batch_errors.batch_type = 'post'
+           );",
+    )?;
     Ok(())
 }
 
@@ -175,7 +381,7 @@ pub fn upsert_replies(conn: &Connection, replies: &[ReplyRow]) -> Result<usize> 
 
     for r in replies {
         tx.execute(
-            "INSERT OR REPLACE INTO replies (
+            "INSERT INTO replies (
                 pid, tid, puid, euid, username, content,
                 quote, quote_pid, quote_tid, quote_puid, quote_euid,
                 quote_username, quote_content, quote_create_time,
@@ -187,7 +393,30 @@ pub fn upsert_replies(conn: &Connection, replies: &[ReplyRow]) -> Result<usize> 
                 ?12, ?13, ?14,
                 ?15, ?16, ?17,
                 ?18, ?19, ?20, ?21, ?22
-            )",
+            )
+            ON CONFLICT(pid) DO UPDATE SET
+                tid = excluded.tid,
+                puid = excluded.puid,
+                euid = excluded.euid,
+                username = excluded.username,
+                content = excluded.content,
+                quote = excluded.quote,
+                quote_pid = excluded.quote_pid,
+                quote_tid = excluded.quote_tid,
+                quote_puid = excluded.quote_puid,
+                quote_euid = excluded.quote_euid,
+                quote_username = excluded.quote_username,
+                quote_content = excluded.quote_content,
+                quote_create_time = excluded.quote_create_time,
+                create_time = excluded.create_time,
+                light_count = excluded.light_count,
+                unlight_count = excluded.unlight_count,
+                title = excluded.title,
+                topic_id = excluded.topic_id,
+                topic_name = excluded.topic_name,
+                format_time = excluded.format_time,
+                fetched_at = excluded.fetched_at
+                -- 注意: ai_analyzed 不在更新列表 → 重抓保留已分析标记",
             rusqlite::params![
                 r.pid,
                 r.tid,
@@ -217,6 +446,40 @@ pub fn upsert_replies(conn: &Connection, replies: &[ReplyRow]) -> Result<usize> 
 
     tx.commit()?;
     Ok(replies.len())
+}
+
+/// 批量查询在一组 pid 中已存在于 replies 表的 pid 集合（用于增量爬取判重）。
+pub fn existing_reply_pids(conn: &Connection, pids: &[i64]) -> Result<HashSet<i64>> {
+    if pids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let placeholders = vec!["?"; pids.len()].join(",");
+    let sql = format!("SELECT pid FROM replies WHERE pid IN ({})", placeholders);
+    let mut stmt = conn.prepare(&sql)?;
+    let params = rusqlite::params_from_iter(pids.iter().copied());
+    let rows = stmt.query_map(params, |row| row.get::<_, i64>(0))?;
+    let mut set = HashSet::new();
+    for row in rows {
+        set.insert(row?);
+    }
+    Ok(set)
+}
+
+/// 批量查询在一组 tid 中已存在于 posts 表的 tid 集合（用于增量爬取判重）。
+pub fn existing_post_tids(conn: &Connection, tids: &[i64]) -> Result<HashSet<i64>> {
+    if tids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let placeholders = vec!["?"; tids.len()].join(",");
+    let sql = format!("SELECT tid FROM posts WHERE tid IN ({})", placeholders);
+    let mut stmt = conn.prepare(&sql)?;
+    let params = rusqlite::params_from_iter(tids.iter().copied());
+    let rows = stmt.query_map(params, |row| row.get::<_, i64>(0))?;
+    let mut set = HashSet::new();
+    for row in rows {
+        set.insert(row?);
+    }
+    Ok(set)
 }
 
 pub fn query_replies(
@@ -540,7 +803,7 @@ pub fn upsert_posts(conn: &Connection, posts: &[PostRow]) -> Result<usize> {
 
     for p in posts {
         tx.execute(
-            "INSERT OR REPLACE INTO posts (
+            "INSERT INTO posts (
                 tid, euid, username, title, summary,
                 create_time, lastpost_time, replies, visits, lights,
                 recommend_num, forum_name, topic_name, topic_id,
@@ -550,7 +813,27 @@ pub fn upsert_posts(conn: &Connection, posts: &[PostRow]) -> Result<usize> {
                 ?6, ?7, ?8, ?9, ?10,
                 ?11, ?12, ?13, ?14,
                 ?15, ?16, ?17, ?18, ?19
-            )",
+            )
+            ON CONFLICT(tid) DO UPDATE SET
+                euid = excluded.euid,
+                username = excluded.username,
+                title = excluded.title,
+                summary = excluded.summary,
+                create_time = excluded.create_time,
+                lastpost_time = excluded.lastpost_time,
+                replies = excluded.replies,
+                visits = excluded.visits,
+                lights = excluded.lights,
+                recommend_num = excluded.recommend_num,
+                forum_name = excluded.forum_name,
+                topic_name = excluded.topic_name,
+                topic_id = excluded.topic_id,
+                total_pics = excluded.total_pics,
+                has_video = excluded.has_video,
+                share_num = excluded.share_num,
+                format_time = excluded.format_time,
+                fetched_at = excluded.fetched_at
+                -- 注意: ai_analyzed 不在更新列表 → 重抓保留已分析标记",
             rusqlite::params![
                 p.tid, p.euid, p.username, p.title, p.summary,
                 p.create_time, p.lastpost_time, p.replies, p.visits, p.lights,
@@ -634,11 +917,16 @@ pub fn count_posts(conn: &Connection, euid: Option<&str>) -> Result<i64> {
     Ok(count)
 }
 
-pub fn save_ai_post_analysis(conn: &Connection, euid: &str, result_json: &str) -> Result<()> {
+pub fn save_ai_post_analysis(conn: &Connection, euid: &str, result_json: &str, analyzed_until: i64) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(
-        "INSERT OR REPLACE INTO ai_post_analysis (euid, result, created_at, updated_at) VALUES (?1, ?2, COALESCE((SELECT created_at FROM ai_post_analysis WHERE euid = ?1), ?3), ?3)",
-        rusqlite::params![euid, result_json, now],
+        "INSERT INTO ai_post_analysis (euid, result, created_at, updated_at, analyzed_until)
+         VALUES (?1, ?2, ?3, ?3, ?4)
+         ON CONFLICT(euid) DO UPDATE SET
+            result = excluded.result,
+            updated_at = excluded.updated_at,
+            analyzed_until = excluded.analyzed_until",
+        rusqlite::params![euid, result_json, now, analyzed_until],
     )?;
     Ok(())
 }
@@ -652,11 +940,37 @@ pub fn get_ai_post_analysis(conn: &Connection, euid: &str) -> Result<Option<Stri
     }
 }
 
-pub fn save_ai_analysis(conn: &Connection, euid: &str, result_json: &str) -> Result<()> {
+/// 该用户回帖数据中最大的 fetched_at（无数据为 0）。
+/// 写入 ai_analysis.analyzed_until 作为兼容性元数据，不参与增量判断。
+pub fn max_replies_fetched_at(conn: &Connection, euid: &str) -> Result<i64> {
+    let v: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(fetched_at), 0) FROM replies WHERE euid = ?1",
+        rusqlite::params![euid],
+        |row| row.get(0),
+    )?;
+    Ok(v)
+}
+
+/// 该用户发帖数据中最大的 fetched_at（无数据为 0）。
+pub fn max_posts_fetched_at(conn: &Connection, euid: &str) -> Result<i64> {
+    let v: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(fetched_at), 0) FROM posts WHERE euid = ?1",
+        rusqlite::params![euid],
+        |row| row.get(0),
+    )?;
+    Ok(v)
+}
+
+pub fn save_ai_analysis(conn: &Connection, euid: &str, result_json: &str, analyzed_until: i64) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(
-        "INSERT OR REPLACE INTO ai_analysis (euid, result, created_at, updated_at) VALUES (?1, ?2, COALESCE((SELECT created_at FROM ai_analysis WHERE euid = ?1), ?3), ?3)",
-        rusqlite::params![euid, result_json, now],
+        "INSERT INTO ai_analysis (euid, result, created_at, updated_at, analyzed_until)
+         VALUES (?1, ?2, ?3, ?3, ?4)
+         ON CONFLICT(euid) DO UPDATE SET
+            result = excluded.result,
+            updated_at = excluded.updated_at,
+            analyzed_until = excluded.analyzed_until",
+        rusqlite::params![euid, result_json, now, analyzed_until],
     )?;
     Ok(())
 }
@@ -1836,10 +2150,15 @@ mod tests {
     #[test]
     fn save_and_get_ai_analysis() {
         let conn = in_memory_conn();
-        save_ai_analysis(&conn, "user1", r#"{"label":"正常用户"}"#).unwrap();
+        save_ai_analysis(&conn, "user1", r#"{"label":"正常用户"}"#, 1000).unwrap();
         let result = get_ai_analysis(&conn, "user1").unwrap();
         assert!(result.is_some());
         assert!(result.unwrap().contains("正常用户"));
+        // analyzed_until 作为元数据快照写入
+        let cursor: i64 = conn
+            .query_row("SELECT analyzed_until FROM ai_analysis WHERE euid='user1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cursor, 1000);
     }
 
     #[test]
@@ -1852,10 +2171,15 @@ mod tests {
     #[test]
     fn save_ai_analysis_overwrites() {
         let conn = in_memory_conn();
-        save_ai_analysis(&conn, "user1", r#"{"v":1}"#).unwrap();
-        save_ai_analysis(&conn, "user1", r#"{"v":2}"#).unwrap();
+        save_ai_analysis(&conn, "user1", r#"{"v":1}"#, 1000).unwrap();
+        save_ai_analysis(&conn, "user1", r#"{"v":2}"#, 2000).unwrap();
         let result = get_ai_analysis(&conn, "user1").unwrap().unwrap();
         assert!(result.contains("\"v\":2"));
+        // 游标快照随覆盖更新
+        let cursor: i64 = conn
+            .query_row("SELECT analyzed_until FROM ai_analysis WHERE euid='user1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cursor, 2000);
     }
 
     // ── ai_post_analysis ──
@@ -1863,9 +2187,13 @@ mod tests {
     #[test]
     fn save_and_get_ai_post_analysis() {
         let conn = in_memory_conn();
-        save_ai_post_analysis(&conn, "user1", r#"{"posts":[]}"#).unwrap();
+        save_ai_post_analysis(&conn, "user1", r#"{"posts":[]}"#, 1000).unwrap();
         let result = get_ai_post_analysis(&conn, "user1").unwrap();
         assert!(result.is_some());
+        let cursor: i64 = conn
+            .query_row("SELECT analyzed_until FROM ai_post_analysis WHERE euid='user1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cursor, 1000);
     }
 
     #[test]
@@ -1992,5 +2320,344 @@ mod tests {
         assert_eq!(deserialized.tid, original.tid);
         assert_eq!(deserialized.title, original.title);
         assert_eq!(deserialized.has_video, original.has_video);
+    }
+}
+
+// ── 增量 AI 分析游标 ──
+
+#[cfg(test)]
+mod incremental_analysis_tests {
+    use super::*;
+
+    fn in_memory_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+        create_tables(&conn).unwrap();
+        conn
+    }
+
+    fn reply_row(pid: i64) -> ReplyRow {
+        ReplyRow {
+            pid,
+            tid: 100 + pid,
+            puid: Some(1000),
+            euid: Some("u1".into()),
+            username: "甲".into(),
+            content: format!("内容{}", pid),
+            quote: 0,
+            quote_pid: None,
+            quote_tid: None,
+            quote_puid: None,
+            quote_euid: None,
+            quote_username: None,
+            quote_content: None,
+            quote_create_time: None,
+            create_time: 1700000000 + pid,
+            light_count: 0,
+            unlight_count: 0,
+            title: "t".into(),
+            topic_id: None,
+            topic_name: None,
+            format_time: None,
+        }
+    }
+
+    /// 插入一条"已存在缓存"记录（等效于旧版本全量分析后的状态）。
+    fn insert_cached_analysis(conn: &Connection, euid: &str, updated_at: i64, analyzed_until: i64) {
+        conn.execute(
+            "INSERT INTO ai_analysis (euid, result, created_at, updated_at, analyzed_until)
+             VALUES (?1, '{}', ?2, ?2, ?3)",
+            rusqlite::params![euid, updated_at, analyzed_until],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn migration_adds_analyzed_until_idempotently() {
+        let conn = in_memory_conn();
+        // 重复迁移幂等
+        add_analyzed_until_columns(&conn).unwrap();
+
+        // 打开新连接（走 create_tables）也不报错
+        let conn2 = Connection::open_in_memory().unwrap();
+        create_tables(&conn2).unwrap();
+        create_tables(&conn2).unwrap();
+
+        let has = conn2
+            .prepare("PRAGMA table_info(ai_analysis)")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|name| name == "analyzed_until");
+        assert!(has, "ai_analysis.analyzed_until 列应存在");
+    }
+
+    #[test]
+    fn backfill_sets_cursor_from_fetched_at() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[reply_row(1), reply_row(2)]).unwrap();
+        // 模拟：数据在时间 1000 抓取，缓存分析在 2000 完成
+        conn.execute("UPDATE replies SET fetched_at = 1000", []).unwrap();
+        insert_cached_analysis(&conn, "u1", 2000, 0);
+
+        backfill_analysis_cursors(&conn).unwrap();
+
+        let cursor: i64 = conn
+            .query_row("SELECT analyzed_until FROM ai_analysis WHERE euid='u1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cursor, 1000);
+        // 无缓存的用户不受影响
+        let none: i64 = conn
+            .query_row("SELECT COALESCE((SELECT analyzed_until FROM ai_analysis WHERE euid='no_one'), 0)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(none, 0);
+    }
+
+    #[test]
+    fn backfill_flags_mark_covered_rows_only() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[reply_row(1)]).unwrap();
+        conn.execute("UPDATE replies SET fetched_at = 1000 WHERE pid = 1", []).unwrap();
+        // 用户在 2000 完成过一次成功分析（游标已回填 = 1000）
+        insert_cached_analysis(&conn, "u1", 2000, 1000);
+
+        // 缓存生成后新抓的数据（fetched_at = 3000，模拟重抓/新抓）
+        upsert_replies(&conn, &[reply_row(2)]).unwrap();
+        conn.execute("UPDATE replies SET fetched_at = 3000 WHERE pid = 2", []).unwrap();
+
+        backfill_ai_analyzed_flags(&conn).unwrap();
+
+        // 只在分析完成时刻之前抓取的行被标记；之后抓的行保持未标记
+        let analyzed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM replies WHERE ai_analyzed = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(analyzed, 1);
+        let unanalyzed = query_unanalyzed_replies(&conn, "u1").unwrap();
+        assert_eq!(unanalyzed.len(), 1);
+        assert_eq!(unanalyzed[0].pid, 2);
+    }
+
+    #[test]
+    fn backfill_flags_cover_refetched_rows_via_create_time() {
+        let conn = in_memory_conn();
+        // 分析完成时刻：晚于 pid=1 的内容发表时间（1700000001）
+        let analyzed_at = 1700000100i64;
+        upsert_replies(&conn, &[reply_row(1)]).unwrap();
+        insert_cached_analysis(&conn, "u1", analyzed_at, 0);
+
+        // 缓存生成后全量重抓：所有行的 fetched_at 都被刷新（晚于分析完成时刻）
+        upsert_replies(&conn, &[reply_row(1), reply_row(2)]).unwrap();
+        conn.execute("UPDATE replies SET fetched_at = 9999999999", []).unwrap();
+        // pid=2 是缓存后新发表的内容（内容时间晚于分析完成时刻）
+        conn.execute("UPDATE replies SET create_time = 1700000200 WHERE pid = 2", []).unwrap();
+
+        backfill_ai_analyzed_flags(&conn).unwrap();
+
+        // 老内容（pid=1）凭 create_time 判据被标记；新内容（pid=2）保持未标记
+        let analyzed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM replies WHERE ai_analyzed = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(analyzed, 1);
+        let un = query_unanalyzed_replies(&conn, "u1").unwrap();
+        assert_eq!(un.len(), 1);
+        assert_eq!(un[0].pid, 2);
+    }
+
+    #[test]
+    fn existing_reply_pids_filters_known() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[reply_row(1), reply_row(2), reply_row(3)]).unwrap();
+
+        // 空输入
+        let empty = existing_reply_pids(&conn, &[]).unwrap();
+        assert!(empty.is_empty());
+
+        // 部分命中
+        let known = existing_reply_pids(&conn, &[2, 3, 99]).unwrap();
+        assert_eq!(known.len(), 2);
+        assert!(known.contains(&2));
+        assert!(known.contains(&3));
+        assert!(!known.contains(&99));
+    }
+
+    #[test]
+    fn existing_post_tids_filters_known() {
+        let conn = in_memory_conn();
+        let post = |tid: i64| crate::posts::PostRow {
+            tid,
+            euid: "u1".into(),
+            username: "甲".into(),
+            title: "标题".into(),
+            summary: "摘要".into(),
+            create_time: 1700000000,
+            lastpost_time: 0,
+            replies: 0,
+            visits: 0,
+            lights: 0,
+            recommend_num: 0,
+            forum_name: String::new(),
+            topic_name: String::new(),
+            topic_id: 0,
+            total_pics: 0,
+            has_video: false,
+            share_num: 0,
+            format_time: None,
+        };
+        upsert_posts(&conn, &[post(1), post(2)]).unwrap();
+        let known = existing_post_tids(&conn, &[2, 3]).unwrap();
+        assert_eq!(known.len(), 1);
+        assert!(known.contains(&2));
+        assert!(!known.contains(&3));
+    }
+
+    #[test]
+    fn upsert_keeps_ai_analyzed_flag_on_refetch() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[reply_row(1)]).unwrap();
+        // 模拟该行已被分析
+        conn.execute("UPDATE replies SET ai_analyzed = 1 WHERE pid = 1", []).unwrap();
+
+        // 重抓同一行（模拟 Web 上再次「获取数据」）
+        upsert_replies(&conn, &[reply_row(1)]).unwrap();
+
+        // INSERT OR REPLACE 会删除+重插导致标记清零；ON CONFLICT DO UPDATE 必须保留标记
+        let flag: i64 = conn
+            .query_row("SELECT ai_analyzed FROM replies WHERE pid=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(flag, 1, "重抓不得清空 ai_analyzed 标记");
+
+        // 新插入的行（新 pid）保持未分析
+        upsert_replies(&conn, &[reply_row(9)]).unwrap();
+        assert_eq!(count_unanalyzed_replies(&conn, "u1").unwrap(), 1);
+    }
+
+    #[test]
+    fn upsert_keeps_ai_analyzed_flag_on_post_refetch() {
+        let conn = in_memory_conn();
+        let post = |tid: i64| crate::posts::PostRow {
+            tid,
+            euid: "u1".into(),
+            username: "甲".into(),
+            title: "标题".into(),
+            summary: "摘要".into(),
+            create_time: 1700000000,
+            lastpost_time: 0,
+            replies: 0,
+            visits: 0,
+            lights: 0,
+            recommend_num: 0,
+            forum_name: String::new(),
+            topic_name: String::new(),
+            topic_id: 0,
+            total_pics: 0,
+            has_video: false,
+            share_num: 0,
+            format_time: None,
+        };
+        upsert_posts(&conn, &[post(1)]).unwrap();
+        conn.execute("UPDATE posts SET ai_analyzed = 1 WHERE tid = 1", []).unwrap();
+
+        upsert_posts(&conn, &[post(1)]).unwrap();
+
+        let flag: i64 = conn
+            .query_row("SELECT ai_analyzed FROM posts WHERE tid=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(flag, 1, "重抓发帖不得清空 ai_analyzed 标记");
+    }
+
+    #[test]
+    fn backfill_flags_skip_users_without_successful_analysis() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[reply_row(1)]).unwrap();
+        conn.execute("UPDATE replies SET fetched_at = 1000", []).unwrap();
+        // 有失败批次记录 → analyzed_until 保持 0（从未成功分析）→ 行不标记
+        insert_cached_analysis(&conn, "u1", 2000, 0);
+        save_batch_error(&conn, "u1", "reply", 0, "boom", None).unwrap();
+
+        backfill_ai_analyzed_flags(&conn).unwrap();
+
+        assert_eq!(count_unanalyzed_replies(&conn, "u1").unwrap(), 1);
+    }
+
+    #[test]
+    fn unanalyzed_query_and_mark() {
+        let conn = in_memory_conn();
+        upsert_replies(&conn, &[reply_row(1), reply_row(2), reply_row(3)]).unwrap();
+        assert_eq!(count_unanalyzed_replies(&conn, "u1").unwrap(), 3);
+
+        // 模拟其中一行已被标记
+        conn.execute("UPDATE replies SET ai_analyzed = 1 WHERE pid = 1", []).unwrap();
+        assert_eq!(count_unanalyzed_replies(&conn, "u1").unwrap(), 2);
+
+        let rows = query_unanalyzed_replies(&conn, "u1").unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let marked = mark_replies_analyzed(&conn, "u1").unwrap();
+        assert_eq!(marked, 2);
+        assert_eq!(count_unanalyzed_replies(&conn, "u1").unwrap(), 0);
+        // 重复标记幂等
+        assert_eq!(mark_replies_analyzed(&conn, "u1").unwrap(), 0);
+    }
+
+    #[test]
+    fn mark_posts_analyzed_works() {
+        let conn = in_memory_conn();
+        // posts 需要有可插入的行；用最小字段插入
+        let post = crate::posts::PostRow {
+            tid: 999,
+            euid: "u1".into(),
+            username: "甲".into(),
+            title: "标题".into(),
+            summary: "摘要".into(),
+            create_time: 1700000000,
+            lastpost_time: 0,
+            replies: 0,
+            visits: 0,
+            lights: 0,
+            recommend_num: 0,
+            forum_name: String::new(),
+            topic_name: String::new(),
+            topic_id: 0,
+            total_pics: 0,
+            has_video: false,
+            share_num: 0,
+            format_time: None,
+        };
+        upsert_posts(&conn, &[post]).unwrap();
+        assert_eq!(count_unanalyzed_posts(&conn, "u1").unwrap(), 1);
+        assert_eq!(mark_posts_analyzed(&conn, "u1").unwrap(), 1);
+        assert_eq!(count_unanalyzed_posts(&conn, "u1").unwrap(), 0);
+    }
+
+    #[test]
+    fn max_fetched_at_reflects_latest_fetch() {
+        let conn = in_memory_conn();
+        assert_eq!(max_replies_fetched_at(&conn, "u1").unwrap(), 0);
+
+        upsert_replies(&conn, &[reply_row(1)]).unwrap();
+        conn.execute("UPDATE replies SET fetched_at = 1000", []).unwrap();
+        upsert_replies(&conn, &[reply_row(2)]).unwrap();
+        conn.execute("UPDATE replies SET fetched_at = 2000 WHERE pid = 2", []).unwrap();
+
+        assert_eq!(max_replies_fetched_at(&conn, "u1").unwrap(), 2000);
+        assert_eq!(max_posts_fetched_at(&conn, "u1").unwrap(), 0);
+    }
+
+    #[test]
+    fn save_analysis_updates_cursor() {
+        let conn = in_memory_conn();
+        save_ai_analysis(&conn, "u1", r#"{"label":"正常用户"}"#, 5000).unwrap();
+        save_ai_analysis(&conn, "u1", r#"{"label":"更新"}"#, 8000).unwrap();
+        let cursor: i64 = conn
+            .query_row("SELECT analyzed_until FROM ai_analysis WHERE euid='u1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cursor, 8000);
+
+        save_ai_post_analysis(&conn, "u1", r#"{"posts":[]}"#, 9000).unwrap();
+        let cursor: i64 = conn
+            .query_row("SELECT analyzed_until FROM ai_post_analysis WHERE euid='u1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cursor, 9000);
     }
 }

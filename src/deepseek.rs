@@ -1195,6 +1195,36 @@ pub async fn synthesize_results(
     Ok(analysis)
 }
 
+const INCREMENTAL_SYNTHESIS_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户画像专家。你之前已经为该用户生成过完整画像（旧画像 JSON），现在拿到了该用户新增回帖的AI分析结果（新批次结果数组）。请结合两者，输出更新后的完整画像。
+
+要求：
+1. 输出与旧画像完全相同的 JSON 字段结构（顶层 user_portrait / viewpoint_summary / behavioral_patterns / personal_info / summary 及各自的子字段保持不变，不要增减字段）。
+2. 新批次中体现的新观点、新话题、新的行为特征、新暴露的个人线索，必须纳入新画像。
+3. 若新批次与旧画像结论冲突，以有更多数据支持的一方为准，并在 summary 中体现变化。
+4. 旧结论若没有被新数据推翻，予以保留；summary 仍需输出 200-300 字的完整评语，可以激烈一点，但要基于分析结果，不能无中生有。
+5. 输出严格JSON格式，不要包含其他文字。"#;
+
+/// 增量合成回帖画像：旧画像 + 新增批次分析结果 → 更新后的完整画像。
+/// 字段结构保持与全量合成（synthesize_results）一致。
+pub async fn synthesize_incremental(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    old_result: &serde_json::Value,
+    new_batch_results: &[serde_json::Value],
+) -> Result<AiAnalysisResult> {
+    let old_json = serde_json::to_string_pretty(old_result)?;
+    let new_json = serde_json::to_string_pretty(new_batch_results)?;
+    let user_prompt = format!(
+        "旧画像（JSON）：\n{}\n\n新增回帖的AI分析结果（JSON数组）：\n{}",
+        old_json, new_json
+    );
+
+    let result = call_llm(client, provider, INCREMENTAL_SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
+    let analysis: AiAnalysisResult = serde_json::from_value(result.value.clone())
+        .map_err(|e| anyhow::anyhow!("解析增量画像结果失败: {}，原始响应: {}", e, serde_json::to_string(&result.value).unwrap_or_default()))?;
+    Ok(analysis)
+}
+
 // ── Post analysis functions ──
 
 /// Split posts into chunks by character budget.
@@ -1286,6 +1316,36 @@ pub async fn synthesize_post_results(
     let result = call_llm(client, provider, POST_SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
     let analysis: AiPostAnalysisResult = serde_json::from_value(result.value.clone())
         .map_err(|e| anyhow::anyhow!("解析AI发帖分析结果失败: {}，原始响应: {}", e, serde_json::to_string(&result.value).unwrap_or_default()))?;
+    Ok(analysis)
+}
+
+const INCREMENTAL_POST_SYNTHESIS_SYSTEM_PROMPT: &str = r#"你是一个虎扑论坛用户画像专家。你之前已经为该用户生成过完整发帖画像（旧画像 JSON），现在拿到了该用户新增发帖的AI分析结果（新批次结果数组）。请结合两者，输出更新后的完整发帖画像。
+
+要求：
+1. 输出与旧画像完全相同的 JSON 字段结构，不要增减字段。
+2. 新批次中体现的新发帖风格、新话题焦点、互动表现变化，必须纳入新画像。
+3. 若新批次与旧画像结论冲突，以有更多数据支持的一方为准，并在 summary 中体现变化。
+4. 旧结论若没有被新数据推翻，予以保留；summary 仍需输出完整的综合评语，分析用户的发帖特点、内容质量和影响力。
+5. 输出严格JSON格式，不要包含其他文字。"#;
+
+/// 增量合成发帖画像：旧画像 + 新增批次分析结果 → 更新后的完整画像。
+/// 字段结构保持与全量合成（synthesize_post_results）一致。
+pub async fn synthesize_post_incremental(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    old_result: &serde_json::Value,
+    new_batch_results: &[serde_json::Value],
+) -> Result<AiPostAnalysisResult> {
+    let old_json = serde_json::to_string_pretty(old_result)?;
+    let new_json = serde_json::to_string_pretty(new_batch_results)?;
+    let user_prompt = format!(
+        "旧发帖画像（JSON）：\n{}\n\n新增发帖的AI分析结果（JSON数组）：\n{}",
+        old_json, new_json
+    );
+
+    let result = call_llm(client, provider, INCREMENTAL_POST_SYNTHESIS_SYSTEM_PROMPT, &user_prompt).await?;
+    let analysis: AiPostAnalysisResult = serde_json::from_value(result.value.clone())
+        .map_err(|e| anyhow::anyhow!("解析增量发帖画像结果失败: {}，原始响应: {}", e, serde_json::to_string(&result.value).unwrap_or_default()))?;
     Ok(analysis)
 }
 

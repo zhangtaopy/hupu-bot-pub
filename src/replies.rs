@@ -267,6 +267,80 @@ pub async fn fetch_replies_paginated(
     })
 }
 
+/// 增量爬取回帖：只爬取尚未入库的数据，遇到「整页都是已存在的 pid」即停止。
+///
+/// 虎扑个人主页回帖按时间倒序排列，新数据必然出现在最前面的页；
+/// 因此从第 1 页逐页爬取，某页全部 pid 已存在时，后续页面只会更旧，可以停止。
+/// 已存在的行仍会 upsert（刷新 light_count 等内容字段），但不会再次触发 AI 分析
+/// （ai_analyzed 标记在 upsert 时保留）。
+pub async fn fetch_replies_incremental(
+    client: &HupuClient,
+    euid: &str,
+    max_pages: u32,
+    page_size: u32,
+    conn: &rusqlite::Connection,
+) -> Result<PaginatedResult> {
+    let mut total_fetched = 0usize;
+    let mut total_new = 0usize;
+    let now_ts = chrono::Local::now().timestamp();
+    let mut max_time: Option<i64> = Some(now_ts);
+    let mut pages_fetched = 0u32;
+
+    loop {
+        let page = pages_fetched + 1;
+        let result = fetch_replies(client, euid, max_time, page, page_size).await?;
+
+        let count = result.items.len();
+        if count == 0 {
+            break;
+        }
+
+        // 判重：本页有多少 pid 尚未入库
+        let pids: Vec<i64> = result.items.iter().map(|r| r.pid).collect();
+        let existing = crate::db::existing_reply_pids(conn, &pids)?;
+        let new_count = pids.iter().filter(|p| !existing.contains(p)).count();
+
+        if new_count == 0 {
+            // 整页都是已爬过的数据 → 后续页面只可能更旧 → 停止
+            println!(
+                "Page {}: 全部 {} 条已存在，增量爬取停止",
+                page, count
+            );
+            break;
+        }
+
+        // 已有行也会更新内容字段（亮点数等），新行正常入库
+        crate::db::upsert_replies(conn, &result.items)?;
+        total_fetched += count;
+        total_new += new_count;
+        println!(
+            "Page {}: fetched {} replies ({} new, total: {}, new total: {})",
+            page, count, new_count, total_fetched, total_new
+        );
+
+        pages_fetched += 1;
+
+        if !result.has_next_page || (max_pages > 0 && pages_fetched >= max_pages) {
+            break;
+        }
+
+        max_time = result.max_time;
+    }
+
+    if pages_fetched == 0 {
+        println!("没有需要增量爬取的新回帖（数据库已是最新）");
+    } else {
+        println!(
+            "增量爬取完成: {} 页, 新增 {} 条新回帖",
+            pages_fetched, total_new
+        );
+    }
+
+    Ok(PaginatedResult {
+        total_fetched: total_new,
+    })
+}
+
 // ── Format ──
 
 fn format_time(row: &ReplyRow) -> String {
