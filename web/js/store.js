@@ -190,6 +190,12 @@ export function createStore() {
   const graphDetail = ref(null);     // { name, isMain, total, replies, offset }
   const graphDetailLoading = ref(false);
   const graphDetailMoreLoading = ref(false);
+  // 视图选项（防重叠相关）
+  const graphNodeLimit = ref(60);        // 星球数量上限，透传给 /api/interactions/graph?max_nodes=
+  const graphLabelMode = ref('auto');    // auto | all | off
+  const graphPaused = ref(false);        // 暂停公转，方便看清/悬停
+  const graphHiddenCount = ref(0);       // 因空间不足未显示的星球数
+  const graphNodeScale = ref(1);         // 拥挤度自适应的尺寸缩放系数
 
   // ── Computed ──
   const sortedPosts = computed(() =>
@@ -268,6 +274,7 @@ export function createStore() {
     ghostMode, ghostInput, ghostHistory, ghostLoading, ghostError, ghostUsername,
     profileCard, profileLoading, profileError, profileCached, profileStage,
     graphLoading, graphError, graphData, graphDetail, graphDetailLoading, graphDetailMoreLoading,
+    graphNodeLimit, graphLabelMode, graphPaused, graphHiddenCount, graphNodeScale,
     hasPersonalInfo, toggleGroup, selectEuid, onEuidFocus, onEuidBlur, clearDisplayData,
     chartTextColor, chartGridColor,
     chartInstances, timers,

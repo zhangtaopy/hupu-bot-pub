@@ -1490,7 +1490,7 @@
       <span class="text-sm font-semibold flex items-center gap-1.5" style="color: var(--text-primary)">
         <span class="section-dot purple"></span> 互动图谱
       </span>
-      <span>太阳系公转：互动分数越高轨道越靠中心 · 颜色 = 平均点亮质量 · 点击节点查看全部互动</span>
+      <span>太阳系公转：互动分数越高轨道越靠中心 · 星球尺寸随数量自适应，轨道已做防重叠排布 · 颜色 = 平均点亮质量 · 点击节点查看全部互动</span>
       <span class="flex items-center gap-1.5">
         <span class="apple-chip purple" style="font-size:10px">本人</span>
         <span class="apple-chip red" style="font-size:10px">≥25亮</span>
@@ -1502,7 +1502,33 @@
       <span v-if="graphData" class="ml-auto font-medium" style="color: var(--text-secondary)">
         与 {{ graphData.total_targets }} 人互动 {{ graphData.total_interactions }} 次
         <template v-if="graphData.shown_targets < graphData.total_targets"> · 展示前 {{ graphData.shown_targets }} 名</template>
+        <template v-if="graphHiddenCount"> · 另有 {{ graphHiddenCount }} 个空间不足未显示</template>
       </span>
+    </div>
+
+    <!-- 视图工具栏：星球太多显得杂乱时，在这里降密度 / 暂停 / 收起标签 -->
+    <div v-if="graphData" class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-medium" style="color: var(--text-tertiary)">星球数量</span>
+        <div class="apple-segment">
+          <button v-for="n in [20, 30, 40, 60]" :key="n" @click="graphNodeLimit = n; onGraphNodeLimitChange()"
+            :class="{ active: graphNodeLimit === n }">{{ n }}</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-medium" style="color: var(--text-tertiary)">标签</span>
+        <div class="apple-segment">
+          <button @click="setGraphLabelMode('auto')" :class="{ active: graphLabelMode === 'auto' }">避让</button>
+          <button @click="setGraphLabelMode('all')" :class="{ active: graphLabelMode === 'all' }">全部</button>
+          <button @click="setGraphLabelMode('off')" :class="{ active: graphLabelMode === 'off' }">隐藏</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 ml-auto">
+        <button @click="toggleGraphPause" class="apple-btn apple-btn-gray !py-1.5 !text-[12px]">
+          {{ graphPaused ? '继续公转' : '暂停公转' }}
+        </button>
+        <button @click="resetGraphView" class="apple-btn apple-btn-gray !py-1.5 !text-[12px]">重置视图</button>
+      </div>
     </div>
 
     <!-- 错误 -->
@@ -1521,8 +1547,8 @@
       <p class="text-sm mt-2" style="color: var(--text-secondary)">正在构建互动图谱…</p>
     </div>
     <div v-else-if="graphData" class="mt-4 apple-card p-2 animate-card">
-      <div id="interaction-graph-chart" style="height: 720px; width: 100%"></div>
-      <p class="px-3 pb-2 text-[11px]" style="color: var(--text-quaternary)">圆圈自动围绕中心旋转 · 滚轮缩放 · 拖拽平移 · 悬停查看最热引用 · 点击查看全部互动</p>
+      <div id="interaction-graph-chart" style="height: 780px; width: 100%"></div>
+      <p class="px-3 pb-2 text-[11px]" style="color: var(--text-quaternary)">整环刚性公转（不会互相压盖）· 滚轮缩放 · 拖拽平移 · 悬停时其余星球淡出聚焦 · 点击查看全部互动<template v-if="graphNodeScale < 0.95"> · 星球尺寸已按密度自适应为 {{ Math.round(graphNodeScale * 100) }}%</template></p>
     </div>
     <div v-else-if="!graphError" class="mt-4 apple-card p-14 text-center">
       <div class="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center" style="background: var(--fill)">
