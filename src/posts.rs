@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::client::HupuClient;
-use crate::utils::strip_html;
+use crate::utils::{strip_html, summarize_unparsable_response};
 
 #[derive(Deserialize, Debug, Clone, Default)]
 #[allow(dead_code)]
@@ -80,9 +80,7 @@ pub const PAGE_SIZE: u32 = 30;
 #[allow(non_snake_case)]
 struct ApiListResponse {
     code: i64,
-    #[allow(dead_code)]
     internalCode: Option<String>,
-    #[allow(dead_code)]
     msg: Option<String>,
     #[serde(default)]
     data: Option<Vec<ApiPostItem>>,
@@ -191,10 +189,29 @@ pub async fn fetch_posts_page(
         .send()
         .await?;
 
-    let body: ApiListResponse = resp.json().await?;
+    // 保留原始响应体：反序列化失败、以及接口返回非预期结构时都能在报错里看到原文
+    let status = resp.status();
+    let body_text = resp.text().await?;
 
-    if body.code != 1 {
-        anyhow::bail!("API returned error code: {}", body.code);
+    let body: ApiListResponse = match serde_json::from_str(&body_text) {
+        Ok(b) => b,
+        Err(e) => anyhow::bail!(
+            "{}",
+            summarize_unparsable_response("获取发帖", status.as_u16(), &body_text, &e.to_string())
+        ),
+    };
+
+    // 与 getReplyList 保持一致：>1 才算失败，避免误杀 code=0 的合法空响应
+    if body.code > 1 {
+        anyhow::bail!(
+            "{}",
+            crate::utils::format_api_error(
+                "获取发帖",
+                body.code,
+                body.internalCode.as_deref(),
+                body.msg.as_deref(),
+            )
+        );
     }
 
     let items = body.data.unwrap_or_default();

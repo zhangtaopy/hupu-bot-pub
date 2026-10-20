@@ -11,6 +11,8 @@ const API_URL: &str = "https://my.hupu.com/pcmapi/pc/space/v1/getReplyList";
 #[derive(Deserialize, Debug)]
 struct ApiResponse {
     code: i32,
+    #[serde(default, rename = "internalCode")]
+    internal_code: Option<String>,
     #[serde(default)]
     msg: Option<String>,
     #[serde(default)]
@@ -198,10 +200,32 @@ pub async fn fetch_replies(
         .send()
         .await?;
 
-    let api: ApiResponse = resp.json().await?;
+    let status = resp.status();
+    let body_text = resp.text().await?;
+
+    let api: ApiResponse = match serde_json::from_str(&body_text) {
+        Ok(a) => a,
+        Err(e) => bail!(
+            "{}",
+            crate::utils::summarize_unparsable_response(
+                "获取回帖",
+                status.as_u16(),
+                &body_text,
+                &e.to_string()
+            )
+        ),
+    };
 
     if api.code > 1 {
-        bail!("API error code={}: {:?}", api.code, api.msg);
+        bail!(
+            "{}",
+            crate::utils::format_api_error(
+                "获取回帖",
+                api.code,
+                api.internal_code.as_deref(),
+                api.msg.as_deref(),
+            )
+        );
     }
 
     let data = api.data.unwrap_or_default();

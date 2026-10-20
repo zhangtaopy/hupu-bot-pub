@@ -174,6 +174,74 @@ pub fn repair_truncated_json(s: &str) -> String {
     result
 }
 
+/// 把虎扑接口的 `internalCode` 翻译成人话。
+///
+/// 虎扑接口失败时 `code` 恒为 0，真正的错误语义在 `internalCode` 里。
+/// 只译已知的、对排查有用的码；未知码原样返回 None，由调用方展示原始值。
+pub fn describe_internal_code(internal_code: &str) -> Option<&'static str> {
+    match internal_code {
+        "PC022003" => Some("登录态失效（Cookie 过期或缺少该接口要求的登录凭证），请重新登录后更新 Cookie"),
+        "PC000000" => Some("成功"),
+        "AS021999" => Some("内容数据异常（多为 referer 不匹配或请求参数不被接受）"),
+        _ => None,
+    }
+}
+
+/// 统一格式化虎扑接口的业务错误，保证 `code` / `internalCode` / `msg` 三个字段都不会丢。
+///
+/// 排查时最常见的情况是 `code=0` 但 `msg` 已写明「用户未登录」，只报 code 等于没报。
+pub fn format_api_error(
+    label: &str,
+    code: impl std::fmt::Display,
+    internal_code: Option<&str>,
+    msg: Option<&str>,
+) -> String {
+    let mut out = format!("{}失败: code={}", label, code);
+    if let Some(ic) = internal_code.filter(|s| !s.is_empty()) {
+        out.push_str(&format!(", internalCode={}", ic));
+        if let Some(hint) = describe_internal_code(ic) {
+            out.push_str(&format!("（{}）", hint));
+        }
+    }
+    if let Some(m) = msg.filter(|s| !s.is_empty()) {
+        out.push_str(&format!(", msg={}", m));
+    }
+    out
+}
+
+/// 当接口返回的不是 JSON（WAF 挑战页、登录跳转页、网关错误页）时，给出可排查的摘要。
+///
+/// 直接跑 `resp.json()` 只会得到 "expected value at line 1 column 1"，
+/// 看不出到底是没登录、被 WAF 拦了还是网关挂了。
+pub fn summarize_unparsable_response(
+    label: &str,
+    http_status: u16,
+    body: &str,
+    parse_error: &str,
+) -> String {
+    let head_lower = body.chars().take(2048).collect::<String>().to_lowercase();
+
+    let cause = if head_lower.contains("aliyun_waf") || head_lower.contains("acw_sc__v") {
+        "疑似阿里云 WAF 拦截页"
+    } else if head_lower.contains("cf-chl") || body.contains("Just a moment") {
+        "疑似 Cloudflare 人机校验页"
+    } else if http_status == 401 || http_status == 403 {
+        "HTTP 401/403，登录态或权限不足"
+    } else if head_lower.trim_start().starts_with("<!doctype") || head_lower.trim_start().starts_with("<html") {
+        "返回的是 HTML 页面而非 JSON，通常是登录跳转或被反爬拦截"
+    } else if body.trim().is_empty() {
+        "响应体为空"
+    } else {
+        "响应不是预期的 JSON 结构，接口可能已变更"
+    };
+
+    let snippet: String = body.trim().chars().take(200).collect();
+    format!(
+        "{}失败: {} (HTTP {}, 解析错误: {}) | 响应前 200 字符: {}",
+        label, cause, http_status, parse_error, snippet
+    )
+}
+
 /// Safe string slicing — takes the first `max_chars` characters (not bytes).
 /// Returns the original string if it's shorter. Never panics on UTF-8.
 #[allow(dead_code)]
@@ -392,5 +460,68 @@ mod tests {
     #[test]
     fn repair_empty() {
         assert_eq!(repair_truncated_json(""), "");
+    }
+
+    #[test]
+    fn describe_known_internal_codes() {
+        assert!(describe_internal_code("PC022003").unwrap().contains("登录"));
+        assert!(describe_internal_code("PC000000").is_some());
+        assert!(describe_internal_code("AS021999").is_some());
+        assert!(describe_internal_code("XX_UNKNOWN").is_none());
+    }
+
+    #[test]
+    fn api_error_keeps_all_fields() {
+        let e = format_api_error("获取发帖", 0, Some("PC022003"), Some("用户未登录"));
+        assert!(e.contains("code=0"), "{}", e);
+        assert!(e.contains("internalCode=PC022003"), "{}", e);
+        assert!(e.contains("msg=用户未登录"), "{}", e);
+        assert!(e.contains("登录态失效"), "{}", e);
+    }
+
+    #[test]
+    fn api_error_handles_missing_fields() {
+        let e = format_api_error("获取发帖", 0, None, None);
+        assert_eq!(e, "获取发帖失败: code=0");
+
+        let e = format_api_error("获取发帖", 0, Some(""), Some(""));
+        assert_eq!(e, "获取发帖失败: code=0");
+    }
+
+    #[test]
+    fn api_error_unknown_code_has_no_hint() {
+        let e = format_api_error("获取发帖", 0, Some("XX_UNKNOWN"), None);
+        assert_eq!(e, "获取发帖失败: code=0, internalCode=XX_UNKNOWN");
+    }
+
+    #[test]
+    fn unparsable_html_mentions_reason_and_status() {
+        let e = summarize_unparsable_response(
+            "获取发帖",
+            200,
+            "<!DOCTYPE html><html><body>login</body></html>",
+            "expected value at line 1 column 1",
+        );
+        assert!(e.contains("获取发帖失败"), "{}", e);
+        assert!(e.contains("HTML"), "{}", e);
+        assert!(e.contains("HTTP 200"), "{}", e);
+        assert!(e.contains("expected value"), "{}", e);
+        assert!(e.contains("<!DOCTYPE"), "{}", e);
+    }
+
+    #[test]
+    fn unparsable_detects_waf_and_forbidden() {
+        let e = summarize_unparsable_response("获取发帖", 200, "<script>aliyun_waf_aa</script>", "err");
+        assert!(e.contains("WAF"), "{}", e);
+
+        let e = summarize_unparsable_response("获取发帖", 403, "{}", "err");
+        assert!(e.contains("403"), "{}", e);
+    }
+
+    #[test]
+    fn unparsable_handles_empty_body() {
+        let e = summarize_unparsable_response("获取发帖", 502, "", "EOF");
+        assert!(e.contains("响应体为空"), "{}", e);
+        assert!(e.contains("HTTP 502"), "{}", e);
     }
 }
