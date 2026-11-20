@@ -686,3 +686,15 @@ html.dark .ai-report pre { background: #000; border: 1px solid var(--separator-s
 .ai-report hr { border: none; height: 1px; background: var(--separator-strong); margin: 1.5em 0; }
 .ai-report a { color: var(--accent); text-decoration: none; }
 .ai-report a:hover { text-decoration: underline; }
+
+/* 懂哥履历：像翻一份有原声的话题小传。 */
+.history-intro {
+  background: linear-gradient(125deg, var(--orange-tint), transparent 65%), var(--surface);
+}
+.history-quote {
+  border-left: 3px solid var(--orange);
+  padding-left: 14px;
+}
+.history-chapter {
+  border-top: 3px solid var(--orange);
+}

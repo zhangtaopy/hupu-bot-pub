@@ -144,6 +144,12 @@ fn create_tables(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_monitor_replies_tid ON monitor_replies(tid);
         CREATE INDEX IF NOT EXISTS idx_monitor_replies_fetch_date ON monitor_replies(fetch_date);
 
+        CREATE TABLE IF NOT EXISTS opinion_history (
+            cache_key TEXT PRIMARY KEY,
+            fingerprint TEXT NOT NULL,
+            result TEXT NOT NULL
+        );
+
         -- AI 玩法：成分卡缓存（查成分）
         CREATE TABLE IF NOT EXISTS ghost_profile (
             euid         TEXT PRIMARY KEY,

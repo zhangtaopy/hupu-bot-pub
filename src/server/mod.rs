@@ -1,6 +1,7 @@
 mod handlers;
 mod config_handlers;
 mod monitor_handlers;
+mod history_handlers;
 pub mod types;
 
 use axum::{routing::{get, post}, Router};
@@ -48,6 +49,7 @@ pub async fn start_server(port: u16, deploy_mode: bool) -> anyhow::Result<()> {
         .route("/api/euids", get(handlers::get_all_euids))
         .route("/api/qa/ask", post(handlers::qa_ask))
         .route("/api/ghost/profile", post(handlers::ghost_profile))
+        .route("/api/history", post(history_handlers::history))
         .route("/api/ghost/chat", post(handlers::ghost_chat))
         .route("/api/interactions/graph", get(handlers::get_interaction_graph))
         .route("/api/interactions/detail", get(handlers::get_interaction_detail))

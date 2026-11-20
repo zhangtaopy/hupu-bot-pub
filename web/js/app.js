@@ -11,6 +11,7 @@ import { setupPostsTab } from './components/PostsTab.js';
 import { setupQaTab } from './components/QaTab.js';
 import { setupMonitorTab } from './components/MonitorTab.js';
 import { setupGhostTab } from './components/GhostTab.js';
+import { setupHistoryTab } from './components/HistoryTab.js';
 import { setupInteractionGraphTab } from './components/InteractionGraphTab.js';
 import * as api from './utils/api.js';
 import { fmtTokens, renderMarkdown } from './utils/helpers.js';
@@ -32,6 +33,7 @@ createApp({
     const qa = setupQaTab(store);
     const monitor = setupMonitorTab(store);
     const ghost = setupGhostTab(store);
+    const historyTab = setupHistoryTab(store);
     const graphTab = setupInteractionGraphTab(store);
 
     // ── Watch darkMode → re-render charts ──
@@ -202,6 +204,7 @@ createApp({
       ...qa,
       ...monitor,
       ...ghost,
+      ...historyTab,
       ...graphTab,
       ...fetchSection,
       saveConfig, skipAiKeySetup, checkConfigStatus,

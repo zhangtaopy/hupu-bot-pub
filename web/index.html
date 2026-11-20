@@ -149,17 +149,18 @@
       </div>
 
       <!-- Tab switch: iOS segmented control -->
-      <div class="apple-segment">
+      <div class="apple-segment max-w-full min-w-0 overflow-x-auto">
         <button @click="activeTab='replies'" :class="{ active: activeTab==='replies' }">回帖分析</button>
         <button @click="activeTab='posts'" :class="{ active: activeTab==='posts' }">发帖数据</button>
         <button @click="activeTab='qa'" :class="{ active: activeTab==='qa' }">AI 问答</button>
         <button @click="activeTab='monitor'" :class="{ active: activeTab==='monitor' }">舆论监控</button>
         <button @click="activeTab='ghost'" :class="{ active: activeTab==='ghost' }">查成分</button>
+        <button @click="activeTab='history'" :class="{ active: activeTab==='history' }">懂哥履历</button>
         <button @click="activeTab='graph'" :class="{ active: activeTab==='graph' }">互动图谱</button>
       </div>
 
       <!-- Search & actions (hidden on monitor tab) -->
-      <div v-if="activeTab!=='monitor'" class="flex items-center gap-2 flex-1 min-w-[320px]">
+      <div v-if="activeTab!=='monitor'" class="flex items-center gap-2 flex-1 min-w-0 w-full sm:min-w-[320px]">
         <div class="relative flex-1">
           <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -177,7 +178,7 @@
           </div>
         </div>
 
-        <button v-if="activeTab!=='ghost' && activeTab!=='graph'" @click="activeTab==='replies' ? analyze() : loadPosts()" :disabled="loading || postLoading" class="apple-btn apple-btn-primary">
+        <button v-if="activeTab!=='ghost' && activeTab!=='graph' && activeTab!=='history'" @click="activeTab==='replies' ? analyze() : loadPosts()" :disabled="loading || postLoading" class="apple-btn apple-btn-primary">
           {{ activeTab === 'replies' ? (loading ? '加载中…' : '分析') : (postLoading ? '加载中…' : '加载发帖') }}
         </button>
         <button v-if="activeTab==='graph'" @click="loadGraph" :disabled="graphLoading || !euid.trim()" class="apple-btn apple-btn-primary">
@@ -1357,6 +1358,126 @@
       <p class="text-xs mt-1.5" style="color: var(--text-quaternary)">支持任意虎扑板块，如 278（汽车区）、34（步行街）、82（NBA）</p>
     </div>
   </div>
+
+  <!-- ── 懂哥履历 ── -->
+  <section v-if="activeTab==='history'" class="max-w-5xl mx-auto px-4 pt-4 pb-12 space-y-5">
+    <div class="apple-card p-5">
+      <div class="flex items-center gap-2"><span class="section-dot orange"></span><h2 class="font-semibold text-lg">懂哥履历</h2></div>
+      <p class="text-sm mt-2" style="color:var(--text-secondary)">翻翻这位 JR 的话题小传：他夸过什么、吐槽过什么，哪些原声值得再亮一次。</p>
+      <form @submit.prevent="historyLoad(false)" class="mt-4 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="text-sm">想了解的话题<input v-model="historyTopic" maxlength="80" class="apple-input w-full mt-1" placeholder="例如：小米汽车、某位球员" required></label>
+          <label class="text-sm">别名（选填，逗号分隔）<input v-model="historyAliases" maxlength="200" class="apple-input w-full mt-1" placeholder="例如：SU7，小米SU7"></label>
+          <label class="text-sm">开始日期<input v-model="historyStart" type="date" class="apple-input w-full mt-1"></label>
+          <label class="text-sm">结束日期<input v-model="historyEnd" type="date" class="apple-input w-full mt-1"></label>
+        </div>
+        <p class="text-xs" style="color:var(--text-tertiary)">日期留空表示全部已收录时间；按北京时间筛选。使用话题或任一别名匹配正文、标题及引用上文。</p>
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" class="apple-btn apple-btn-gray" :disabled="historyLoading || !euid.trim() || !historyTopic.trim()">查看数据 / 已有报告</button>
+          <button type="button" @click="historyLoad(true)" class="apple-btn apple-btn-primary" :disabled="historyLoading || !euid.trim() || !historyTopic.trim() || (historyData && !historyData.coverage.matched)">{{ historyReport ? '重新生成履历' : 'AI 生成履历' }}</button>
+        </div>
+      </form>
+      <p v-if="!euid.trim()" class="text-sm mt-3" style="color:var(--text-secondary)">请先在顶部输入或选择用户 euid。</p>
+      <p v-if="historyLoading" role="status" class="text-sm mt-3" style="color:var(--blue)">{{ historyStage }}</p>
+      <div v-if="historyError" role="alert" class="apple-alert error mt-3">{{ historyError }}</div>
+    </div>
+
+    <div v-if="historyData" class="text-sm px-1 space-y-2" style="color:var(--text-secondary)">
+      <p v-if="historyData.coverage.matched">找到 <b style="color:var(--text-primary)">{{ historyData.coverage.matched }}</b> 条相关发言 · {{ historyData.coverage.first_date }} — {{ historyData.coverage.last_date }}</p>
+      <p v-else>还没翻到相关发言。换个关键词、加几个别名，或先用上方入口抓取这位 JR 的记录。</p>
+      <p v-if="historyLegacy" class="apple-alert">这是之前保存的旧版报告。点击「重新生成履历」，换成观点看点、原声精选和各期话题的新版本。</p>
+      <p v-else-if="historyData.stale" class="apple-alert">收录数据已更新，下面是之前的小传，可以重新生成看看新发言。</p>
+    </div>
+
+    <template v-if="historyReport">
+      <article class="apple-card p-6 sm:p-8 history-intro">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+          <span class="apple-chip orange">聊聊 {{ historyReport.topic }}</span>
+          <span class="text-xs" style="color:var(--text-tertiary)">这位 JR 的话题小传</span>
+        </div>
+        <h3 class="text-2xl sm:text-3xl font-bold leading-snug break-words">{{ historyReport.analysis.headline || '聊到' + historyReport.topic + '，他怎么看？' }}</h3>
+        <p class="mt-4 leading-loose" style="color:var(--text-secondary)">{{ historyReport.analysis.summary }}</p>
+        <details v-if="historyReport.analysis.summary_claim_ids.length" class="mt-4 text-xs" style="color:var(--text-tertiary)">
+          <summary class="cursor-pointer">翻翻这段观察的原声</summary>
+          <div class="flex flex-wrap gap-2 mt-2"><button v-for="(id, i) in historyReport.analysis.summary_claim_ids" :key="id" @click="historyShowClaim(id)" class="apple-btn apple-btn-sm apple-btn-tinted">发言 {{ i + 1 }}</button></div>
+        </details>
+      </article>
+
+      <section v-if="historyReport.analysis.themes?.length" class="space-y-3">
+        <h3 class="font-semibold text-lg px-1">他的几个鲜明看点</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <article v-for="(theme, i) in historyReport.analysis.themes" :key="i" class="apple-card p-5">
+            <span class="text-xs font-semibold" style="color:var(--orange)">看点 {{ String(i + 1).padStart(2, '0') }}</span>
+            <h4 class="font-semibold text-lg mt-2">{{ theme.title }}</h4>
+            <p class="text-sm leading-relaxed mt-3" style="color:var(--text-secondary)">{{ theme.interpretation }}</p>
+            <div class="flex flex-wrap gap-2 mt-4"><button v-for="(id, n) in theme.claim_ids" :key="id" @click="historyShowClaim(id)" class="apple-btn apple-btn-sm apple-btn-gray">看原话 {{ theme.claim_ids.length > 1 ? n + 1 : '' }}</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section v-if="historyHighlights.length" class="space-y-3">
+        <div class="flex flex-wrap justify-between items-center gap-2 px-1"><h3 class="font-semibold text-lg">原声精选</h3><span class="text-xs" style="color:var(--text-tertiary)">先读他说的，再看这句的意思</span></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <article v-for="(item, i) in historyHighlights" :key="item.claim_id" class="apple-card p-5 flex flex-col">
+            <div class="flex justify-between gap-3 items-center text-xs">
+              <span style="color:var(--text-tertiary)">{{ item.source.date }}</span>
+              <span v-if="item.source.light_count > 0" class="apple-chip orange">亮了 {{ item.source.light_count }}</span>
+              <span v-else class="apple-chip">代表发言</span>
+            </div>
+            <blockquote class="history-quote mt-4 text-base leading-relaxed whitespace-pre-wrap break-words">{{ item.claim.excerpt }}</blockquote>
+            <p class="text-sm leading-relaxed mt-4" style="color:var(--text-secondary)">{{ item.comment }}</p>
+            <div class="mt-auto pt-4"><button @click="historyShowClaim(item.claim_id)" class="apple-btn apple-btn-sm apple-btn-tinted">展开上下文 ↗</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section v-if="historyReport.analysis.phases.length" class="space-y-4">
+        <div class="px-1"><h3 class="font-semibold text-lg">那阵子，他在聊什么</h3><p class="text-xs mt-1" style="color:var(--text-tertiary)">按发言时间翻一翻，每一期都有自己的关注点。</p></div>
+        <article v-for="(phase, index) in historyReport.analysis.phases" :key="index" class="apple-card p-5 sm:p-6 history-chapter">
+          <div class="flex flex-wrap justify-between items-center gap-2 text-xs mb-3">
+            <span class="font-semibold" style="color:var(--orange)">第 {{ index + 1 }} 期</span>
+            <span style="color:var(--text-tertiary)">{{ phase.start_date }}<span v-if="phase.end_date !== phase.start_date"> — {{ phase.end_date }}</span></span>
+          </div>
+          <h4 class="font-semibold text-xl">{{ phase.title }}</h4>
+          <p class="text-sm leading-loose mt-3" style="color:var(--text-secondary)">{{ phase.summary }}</p>
+          <div v-for="id in phase.claim_ids" :key="id" class="mt-5 pt-4 border-t" style="border-color:var(--separator)">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-2"><span style="color:var(--text-tertiary)">{{ historySource(historyClaim(id).evidence_id).date }} · {{ historyClaim(id).object }}</span><span v-if="historySource(historyClaim(id).evidence_id).light_count > 0" style="color:var(--orange)">亮了 {{ historySource(historyClaim(id).evidence_id).light_count }}</span></div>
+            <blockquote class="history-quote text-sm leading-relaxed whitespace-pre-wrap break-words">{{ historyClaim(id).excerpt }}</blockquote>
+            <p class="text-sm leading-relaxed mt-3">{{ historyClaim(id).stance }}</p>
+            <details v-if="historyClaim(id).conditions || historyClaim(id).uncertainty" class="text-xs mt-2" style="color:var(--text-tertiary)"><summary class="cursor-pointer">结合语境再看</summary><p class="mt-2">{{ historyClaim(id).conditions }} {{ historyClaim(id).uncertainty }}</p></details>
+            <button @click="historyShowClaim(id)" class="apple-btn apple-btn-sm apple-btn-tinted mt-3">看原文与上下文</button>
+          </div>
+        </article>
+      </section>
+    </template>
+
+    <details v-if="historyData" class="apple-card p-5 text-xs" style="color:var(--text-tertiary)">
+      <summary class="cursor-pointer">数据范围与阅读说明</summary>
+      <div class="mt-3 space-y-2 leading-relaxed">
+        <p>本次检索命中 {{ historyData.coverage.matched }} 条发言，来自 {{ historyData.coverage.independent_posts }} 个帖子，选取 {{ historyData.coverage.sampled }} 条分析，同月相同正文与语境合并 {{ historyData.coverage.deduplicated }} 条。</p>
+        <p>兼顾时间覆盖与实际点亮数，最多选 60 条。点亮数仅为采集时的记录，不代表观点对错。长文本只分析部分内容，原文可展开查看。</p>
+        <p v-if="historyData.coverage.months.length">有相关记录的月份：{{ historyData.coverage.months.join('、') }}。其他月份没有命中记录，不能据此推断这位 JR 的行为。</p>
+        <template v-if="historyReport">
+          <p v-if="historyReport.analysis.limitations">{{ historyReport.analysis.limitations }}</p>
+          <p>这份小传使用 {{ historyReport.coverage.sampled }} 条样本，生成于 {{ new Date(historyReport.generated_at * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}。原话来自已收录正文，解读由 AI 整理；发帖只有标题与摘要。</p>
+        </template>
+      </div>
+    </details>
+
+    <div v-if="historyEvidence" class="fixed inset-0 z-50 flex justify-end" @keydown.esc="historyEvidence=null">
+      <button @click="historyEvidence=null" class="absolute inset-0 bg-black/40" aria-label="关闭原文"></button>
+      <aside role="dialog" aria-modal="true" aria-labelledby="history-evidence-title" class="relative w-full sm:max-w-xl h-full overflow-y-auto p-6 shadow-xl" style="background:var(--surface)">
+        <div class="flex justify-between gap-3"><h3 id="history-evidence-title" class="font-semibold">原文与上下文</h3><button @click="historyEvidence=null" class="apple-btn apple-btn-sm apple-btn-gray">关闭</button></div>
+        <p class="text-sm mt-4">{{ historyEvidence.date }} · {{ historyEvidence.kind === 'post' ? '发帖标题与摘要' : '用户回帖' }} · {{ historyEvidence.id }}</p>
+        <h4 class="font-semibold mt-2 break-words">{{ historyEvidence.title }}</h4>
+        <div v-if="historyEvidence.quote_content" class="text-sm mt-4 p-3 rounded-lg" style="background:var(--bg);color:var(--text-secondary)"><p class="font-medium">引用上文 · {{ historyEvidence.quote_username || '其他用户' }}（不计入本人观点）</p><p class="mt-2 whitespace-pre-wrap break-words">{{ historyEvidence.quote_content }}</p></div>
+        <p class="mt-4 whitespace-pre-wrap break-words leading-relaxed">{{ historyEvidenceParts.before }}<mark>{{ historyEvidenceParts.excerpt }}</mark>{{ historyEvidenceParts.after }}</p>
+        <p v-if="historyEvidence.truncated" class="text-xs mt-3" style="color:var(--text-secondary)">这条长记录仅有部分内容参与 AI 分析，此处展示完整已存文本。</p>
+        <p class="text-xs mt-4" style="color:var(--text-tertiary)">采集于 {{ new Date(historyEvidence.fetched_at * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}；原帖现时内容可能变化。</p>
+        <a :href="historyEvidence.url" target="_blank" rel="noopener noreferrer" class="apple-btn apple-btn-tinted mt-4">打开原帖</a>
+      </aside>
+    </div>
+  </section>
 
   <!-- ── Ghost Tab (成分卡 + 魂穿) ── -->
   <div v-if="activeTab==='ghost'" class="max-w-4xl mx-auto px-4 pt-4 pb-12">

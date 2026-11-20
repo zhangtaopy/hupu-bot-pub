@@ -594,6 +594,8 @@ pub struct TokenUsage {
 #[derive(Deserialize)]
 struct Choice {
     message: ChoiceMessage,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -825,6 +827,33 @@ pub struct DeepSeekResult {
     pub raw_content: String,
 }
 
+#[derive(Debug)]
+pub(crate) struct LlmHttpError(pub u16);
+
+impl std::fmt::Display for LlmHttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AI service HTTP {}", self.0)
+    }
+}
+
+impl std::error::Error for LlmHttpError {}
+
+#[derive(Debug)]
+pub(crate) enum LlmOutputError {
+    Empty,
+    OutputLimit,
+}
+
+impl std::fmt::Display for LlmOutputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Empty => "AI 返回了空正文",
+            Self::OutputLimit => "AI 输出达到长度上限，未生成完整结果",
+        })
+    }
+}
+impl std::error::Error for LlmOutputError {}
+
 #[derive(Serialize)]
 struct LlmRequest {
     model: String,
@@ -832,21 +861,103 @@ struct LlmRequest {
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<ResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<serde_json::Value>,
 }
 
-async fn call_llm(
+pub(crate) async fn call_llm(
     client: &reqwest::Client,
     provider: &AiProvider,
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<DeepSeekResult> {
-    let response_format = if provider.use_json_mode() {
+    call_llm_json(client, provider, system_prompt, user_prompt, false, false).await
+}
+
+/// History needs a bounded, complete JSON answer rather than a long reasoning trace.
+/// DeepSeek defaults to thinking; JSON mode can also return blank content.
+pub(crate) async fn call_history_json(
+    client: &reqwest::Client,
+    provider: &AiProvider,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<DeepSeekResult> {
+    let mut attempts = 0;
+    let result = retry_blank_json(|fallback| {
+        attempts += 1;
+        call_llm_json(client, provider, system_prompt, user_prompt, true, fallback)
+    }).await;
+    // Only retry connect failures: no generation request reached the provider.
+    // Body/read/send failures may have been billed and must not be resubmitted.
+    if attempts == 1 && result.as_ref().err().and_then(|e| e.downcast_ref::<reqwest::Error>())
+        .is_some_and(|e| e.is_connect() && !e.is_timeout()) {
+        eprintln!("[history] connect failed; retrying once with a fresh connection");
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let fresh = history_http_client()?;
+        return call_llm_json(&fresh, provider, system_prompt, user_prompt, true, false).await;
+    }
+    result
+}
+
+pub(crate) fn history_http_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+}
+
+pub(crate) fn network_error_message(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        return if error.is_connect() { "连接 AI 服务超时，请检查网络或代理后重试" }
+            else { "等待 AI 响应超时，请稍后重试" };
+    }
+    // Inspect the chain only for classification. Never log its text: it may
+    // contain proxy credentials, URLs or other sensitive values.
+    let mut detail = String::new();
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(e) = source {
+        detail.push_str(&e.to_string().to_lowercase());
+        detail.push(' ');
+        source = e.source();
+    }
+    network_error_category(&detail, error.is_connect(), error.is_body(), error.is_decode())
+}
+
+fn network_error_category(detail: &str, connect: bool, body: bool, decode: bool) -> &'static str {
+    if ["dns", "failed to lookup", "name or service not known", "nodename nor servname"].iter().any(|s| detail.contains(s)) {
+        "无法解析 AI 服务域名，请检查 DNS 或代理设置"
+    } else if ["certificate", "tls", "ssl"].iter().any(|s| detail.contains(s)) {
+        "AI 服务的安全连接失败，请检查证书、代理或系统时间"
+    } else if connect {
+        "无法建立 AI 服务连接，请检查网络或代理设置"
+    } else if body || decode {
+        "接收 AI 响应时连接中断，请稍后重试"
+    } else {
+        "发送 AI 请求时连接中断，请检查网络或代理后重试"
+    }
+}
+
+async fn retry_blank_json<F, Fut>(mut call: F) -> Result<DeepSeekResult>
+where F: FnMut(bool) -> Fut,
+      Fut: std::future::Future<Output = Result<DeepSeekResult>>,
+{
+    match call(false).await {
+        Err(error) if matches!(error.downcast_ref::<LlmOutputError>(), Some(LlmOutputError::Empty)) => {
+            eprintln!("[history] AI returned blank content; retrying once without JSON mode");
+            call(true).await
+        }
+        result => result,
+    }
+}
+
+fn json_request(provider: &AiProvider, system_prompt: &str, user_prompt: &str, history: bool, fallback: bool) -> LlmRequest {
+    let response_format = if provider.use_json_mode() && !fallback {
         Some(ResponseFormat { type_: "json_object".to_string() })
     } else {
         None
     };
 
-    let request = LlmRequest {
+    LlmRequest {
         model: provider.model().to_string(),
         messages: vec![
             Message { role: "system".to_string(), content: system_prompt.to_string() },
@@ -854,7 +965,28 @@ async fn call_llm(
         ],
         max_tokens: 8192,
         response_format,
-    };
+        thinking: if history && matches!(provider, AiProvider::DeepSeek { .. }) {
+            Some(serde_json::json!({"type": "disabled"}))
+        } else { None },
+    }
+}
+
+fn json_content(choice: &Choice, strict: bool) -> Result<String> {
+    let content = choice.message.content.clone().unwrap_or_default();
+    if content.trim().is_empty() {
+        return Err(LlmOutputError::Empty.into());
+    }
+    if strict && choice.finish_reason.as_deref() == Some("length") {
+        return Err(LlmOutputError::OutputLimit.into());
+    }
+    Ok(content)
+}
+
+async fn call_llm_json(
+    client: &reqwest::Client, provider: &AiProvider, system_prompt: &str, user_prompt: &str,
+    history: bool, fallback: bool,
+) -> Result<DeepSeekResult> {
+    let request = json_request(provider, system_prompt, user_prompt, history, fallback);
 
     let resp = client
         .post(provider.base_url())
@@ -865,6 +997,9 @@ async fn call_llm(
         .await?;
 
     let status = resp.status();
+    if !status.is_success() {
+        return Err(LlmHttpError(status.as_u16()).into());
+    }
     let raw_text = resp.text().await?;
 
     let body: DeepSeekResponse = serde_json::from_str(&raw_text)
@@ -874,17 +1009,10 @@ async fn call_llm(
         bail!("LLM API error: {} ({:?})，原始响应: {}", err.message, err.type_, safe_truncate(&raw_text, 2000));
     }
 
-    if !status.is_success() {
-        bail!("LLM API HTTP {}，原始响应: {}", status, safe_truncate(&raw_text, 2000));
-    }
-
-    let content = body.choices
+    let choice = body.choices
         .first()
-        .ok_or_else(|| anyhow::anyhow!("No choices in LLM response，原始响应: {}", safe_truncate(&raw_text, 2000)))?
-        .message
-        .content
-        .clone()
-        .unwrap_or_default();
+        .ok_or_else(|| anyhow::anyhow!("No choices in LLM response"))?;
+    let content = json_content(choice, history)?;
 
     // json_object mode should return valid JSON, but LLMs may still emit
     // unescaped control characters or truncate on token limits.
@@ -1492,4 +1620,109 @@ pub fn format_history(history: &[crate::server::types::HistoryEntry]) -> String 
         s.push_str(&format!("Q{}: {}\nA{}: {}{}\n\n", i + 1, h.question, i + 1, brief, ellipsis));
     }
     s
+}
+
+#[cfg(test)]
+mod history_json_tests {
+    use super::*;
+    use std::future::ready;
+
+    #[test]
+    fn network_diagnostics_are_classified_without_exposing_source_text() {
+        for (detail, connect, body, expected) in [
+            ("dns error: failed to lookup address",true,false,"域名"),
+            ("certificate verify failed",true,false,"安全连接"),
+            ("connection refused",true,false,"建立"),
+            ("connection reset by peer",false,true,"接收"),
+            ("broken pipe",false,false,"发送"),
+        ] {
+            let sensitive = format!("{detail} https://test-key:secret@proxy.invalid/?api_key=secret");
+            let message = network_error_category(&sensitive,connect,body,false);
+            assert!(message.contains(expected),"{message}");
+            assert!(!message.contains("secret") && !message.contains("test-key") && !message.contains("proxy.invalid"));
+        }
+    }
+
+    fn provider() -> AiProvider {
+        AiProvider::DeepSeek { api_key: "test-only".into(), model: DEFAULT_DEEPSEEK_MODEL.into() }
+    }
+
+    #[test]
+    fn history_disables_deepseek_thinking_and_fallback_omits_json_mode() {
+        let history = serde_json::to_value(json_request(&provider(), "json", "test", true, false)).unwrap();
+        assert_eq!(history["thinking"]["type"], "disabled");
+        assert_eq!(history["response_format"]["type"], "json_object");
+        let fallback = serde_json::to_value(json_request(&provider(), "json", "test", true, true)).unwrap();
+        assert_eq!(fallback["thinking"]["type"], "disabled");
+        assert!(fallback.get("response_format").is_none());
+        let existing = serde_json::to_value(json_request(&provider(), "json", "test", false, false)).unwrap();
+        assert!(existing.get("thinking").is_none());
+        let other = AiProvider::OpenRouter {api_key:"test-only".into(),model:"test".into()};
+        assert!(serde_json::to_value(json_request(&other,"json","test",true,false)).unwrap().get("thinking").is_none());
+    }
+
+    #[test]
+    fn blank_or_reasoning_only_outputs_are_never_parsed_as_answers() {
+        for content in [serde_json::Value::Null, serde_json::json!(""), serde_json::json!("   \n")] {
+            let choice: Choice = serde_json::from_value(serde_json::json!({"finish_reason":"stop","message":{"content":content,"reasoning_content":"private reasoning must never become the answer"}})).unwrap();
+            let error = json_content(&choice,true).err().unwrap();
+            assert!(matches!(error.downcast_ref::<LlmOutputError>(),Some(LlmOutputError::Empty)));
+            assert!(!error.to_string().contains("private reasoning"));
+        }
+    }
+
+    #[test]
+    fn truncated_outputs_are_rejected_even_if_json_can_be_repaired() {
+        let choice: Choice = serde_json::from_value(serde_json::json!({"finish_reason":"length","message":{"content":"{\"summary\":\"unfinished"}})).unwrap();
+        assert!(matches!(json_content(&choice,true).err().unwrap().downcast_ref::<LlmOutputError>(),Some(LlmOutputError::OutputLimit)));
+    }
+
+    #[tokio::test]
+    async fn blank_response_retries_once_and_preserves_successful_result() {
+        let mut calls = 0;
+        let result = retry_blank_json(|fallback| {
+            calls += 1;
+            assert_eq!(fallback, calls == 2);
+            ready(if calls == 1 { Err(LlmOutputError::Empty.into()) } else {
+                Ok(DeepSeekResult { value:serde_json::json!({"summary":"valid"}),raw_content:"{}".into() })
+            })
+        }).await.unwrap();
+        assert_eq!(calls,2);
+        assert_eq!(result.value["summary"],"valid");
+    }
+
+    #[tokio::test]
+    async fn repeated_blank_is_bounded_and_http_errors_are_not_retried() {
+        let mut calls = 0;
+        let result = retry_blank_json(|_| { calls+=1; ready(Err(LlmOutputError::Empty.into())) }).await;
+        assert!(result.is_err()); assert_eq!(calls,2);
+        calls = 0;
+        let result = retry_blank_json(|_| { calls+=1; ready(Err(LlmHttpError(402).into())) }).await;
+        assert!(result.is_err()); assert_eq!(calls,1);
+    }
+}
+
+#[cfg(test)]
+mod connectivity_check {
+    #[tokio::test]
+    #[ignore = "Explicit external connectivity check, no user records or generation"]
+    async fn deepseek_connectivity() {
+        let client = super::history_http_client().unwrap();
+        let authenticated = std::env::var("HUPU_AI_CHECK_AUTH").as_deref() == Ok("1");
+        let request = if authenticated {
+            let provider = crate::config::Config::load().unwrap().ai_provider();
+            let url = format!("{}/models", provider.base_url().trim_end_matches("/chat/completions"));
+            client.get(url).bearer_auth(provider.api_key())
+        } else { client.get("https://api.deepseek.com") };
+        match request.send().await {
+            Ok(response) => {
+                println!("reqwest connectivity HTTP {}, version {:?}, authenticated={authenticated}", response.status(), response.version());
+                if authenticated { assert!(response.status().is_success()); }
+            },
+            Err(error) => {
+                eprintln!("{}", super::network_error_message(&error));
+                panic!("connectivity failed");
+            }
+        }
+    }
 }
