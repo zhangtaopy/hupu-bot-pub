@@ -1,7 +1,7 @@
 mod handlers;
 mod config_handlers;
-mod monitor_handlers;
 mod history_handlers;
+mod thread_opinions;
 pub mod types;
 
 use axum::{routing::{get, post}, Router};
@@ -50,17 +50,11 @@ pub async fn start_server(port: u16, deploy_mode: bool) -> anyhow::Result<()> {
         .route("/api/qa/ask", post(handlers::qa_ask))
         .route("/api/ghost/profile", post(handlers::ghost_profile))
         .route("/api/history", post(history_handlers::history))
+        .route("/api/thread/branch", post(thread_opinions::branch))
+        .route("/api/thread/opinions", post(thread_opinions::opinions))
         .route("/api/ghost/chat", post(handlers::ghost_chat))
         .route("/api/interactions/graph", get(handlers::get_interaction_graph))
         .route("/api/interactions/detail", get(handlers::get_interaction_detail))
-        .route("/api/monitor/fetch", post(monitor_handlers::start_monitor_fetch))
-        .route("/api/monitor/fetch-progress", get(monitor_handlers::get_monitor_fetch_progress))
-        .route("/api/monitor/posts", get(monitor_handlers::get_monitor_posts))
-        .route("/api/monitor/replies", get(monitor_handlers::get_monitor_replies))
-        .route("/api/monitor/dates", get(monitor_handlers::get_monitor_dates))
-        .route("/api/monitor/stats", get(monitor_handlers::get_monitor_stats))
-        .route("/api/monitor/analyze", post(monitor_handlers::start_monitor_analyze))
-        .route("/api/monitor/analyze-progress", get(monitor_handlers::get_monitor_analyze_progress))
         .route("/api/config/status", get(config_handlers::get_config_status))
         .route("/api/config/save", post(config_handlers::save_config))
         .route("/", get(handlers::get_index))

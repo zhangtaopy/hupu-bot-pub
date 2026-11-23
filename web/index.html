@@ -153,14 +153,14 @@
         <button @click="activeTab='replies'" :class="{ active: activeTab==='replies' }">回帖分析</button>
         <button @click="activeTab='posts'" :class="{ active: activeTab==='posts' }">发帖数据</button>
         <button @click="activeTab='qa'" :class="{ active: activeTab==='qa' }">AI 问答</button>
-        <button @click="activeTab='monitor'" :class="{ active: activeTab==='monitor' }">舆论监控</button>
+        <button @click="activeTab='thread'" :class="{ active: activeTab==='thread' }">论点地图</button>
         <button @click="activeTab='ghost'" :class="{ active: activeTab==='ghost' }">查成分</button>
         <button @click="activeTab='history'" :class="{ active: activeTab==='history' }">懂哥履历</button>
         <button @click="activeTab='graph'" :class="{ active: activeTab==='graph' }">互动图谱</button>
       </div>
 
-      <!-- Search & actions (hidden on monitor tab) -->
-      <div v-if="activeTab!=='monitor'" class="flex items-center gap-2 flex-1 min-w-0 w-full sm:min-w-[320px]">
+      <!-- Search & actions -->
+      <div v-if="activeTab!=='thread'" class="flex items-center gap-2 flex-1 min-w-0 w-full sm:min-w-[320px]">
         <div class="relative flex-1">
           <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -242,8 +242,8 @@
     </div>
   </header>
 
-  <!-- ── Data Fetch Section (hidden on monitor tab) ── -->
-  <div v-if="activeTab!=='monitor'" class="border-b" style="border-color: var(--separator); background: var(--surface)">
+  <!-- ── Data Fetch Section ── -->
+  <div v-if="activeTab!=='thread'" class="border-b" style="border-color: var(--separator); background: var(--surface)">
     <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3 flex-wrap">
       <span class="text-[13px] font-semibold flex items-center gap-1.5" style="color: var(--text-primary)">
         <span class="section-dot orange"></span> 获取数据
@@ -1135,231 +1135,126 @@
     </div>
   </div>
 
-  <!-- ── Monitor Tab ── -->
-  <div v-if="activeTab==='monitor'" class="max-w-7xl mx-auto px-4 mt-4 space-y-6 pb-12">
-    <!-- Topic input + actions -->
-    <div class="apple-card p-5">
-      <div class="flex items-center gap-3 flex-wrap">
-        <label class="text-sm font-medium whitespace-nowrap" style="color: var(--text-secondary)">板块 ID</label>
-        <input v-model="topicId" placeholder="如 278" class="apple-input !w-28 font-mono">
-        <div class="flex gap-1.5 flex-wrap">
-          <button v-for="t in quickTopics" :key="t.id" @click="topicId = t.id"
-            class="apple-chip cursor-pointer transition-transform hover:scale-105"
-            :class="topicId === t.id ? 'blue !font-semibold' : ''">
-            {{ t.name }}
-          </button>
-        </div>
-        <span class="text-xs mx-1" style="color: var(--text-quaternary)">|</span>
-        <label class="text-xs whitespace-nowrap" style="color: var(--text-tertiary)">范围</label>
-        <select v-model.number="fetchDays" class="apple-select !py-1.5 !text-[13px]">
-          <option :value="1">今天</option>
-          <option :value="3">最近 3 天</option>
-          <option :value="7">最近 7 天</option>
-          <option :value="14">最近 14 天</option>
-          <option :value="30">最近 30 天</option>
-        </select>
-        <button @click="loadExistingData" :disabled="monitorLoading" class="apple-btn apple-btn-tinted apple-btn-sm">加载已有数据</button>
-        <button @click="monitorFetchData" :disabled="monitorLoading" class="apple-btn apple-btn-primary apple-btn-sm">
-          {{ monitorLoading ? '抓取中…' : '抓取数据' }}
-        </button>
-        <button @click="startAnalyze" :disabled="monitorLoading || !monitorStats" class="apple-btn apple-btn-purple apple-btn-sm">
-          {{ analyzeProgress.done ? '重新 AI 分析' : 'AI 分析' }}
-        </button>
-      </div>
-      <!-- Covered dates -->
-      <div v-if="monitorStats && monitorStats.covered_dates && monitorStats.covered_dates.length" class="mt-3 flex items-center gap-2 text-xs" style="color: var(--text-tertiary)">
-        <span>📅 已覆盖 {{ monitorStats.covered_dates.length }} 天：</span>
-        <span class="font-mono tabular">{{ monitorStats.covered_dates.slice(0, 10).join(', ') }}</span>
-        <span v-if="monitorStats.covered_dates.length > 10" style="color: var(--text-quaternary)">+{{ monitorStats.covered_dates.length - 10 }} 更多</span>
-        <span style="color: var(--text-quaternary)">— 再次抓取将自动跳过已覆盖日期</span>
-      </div>
-      <!-- Progress bars -->
-      <div v-if="!fetchProgress.done && fetchProgress.phase" class="mt-3">
-        <div class="flex items-center gap-2 text-xs" style="color: var(--text-secondary)">
-          <span class="animate-pulse">⏳</span>
-          <span>{{ fetchProgress.phase }}</span>
-          <span v-if="fetchProgress.current > 0" class="font-semibold tabular" style="color: var(--accent)">（已获取 {{ fetchProgress.current }} 条帖子）</span>
-        </div>
-        <div class="apple-progress mt-1.5">
-          <div class="indeterminate-bar"></div>
-        </div>
-      </div>
-      <div v-if="!analyzeProgress.done && analyzeProgress.phase" class="mt-3">
-        <div class="flex items-center gap-2 text-xs" style="color: var(--purple)">
-          <span class="animate-pulse">🤖</span>
-          <span>{{ analyzeProgress.phase }}</span>
-        </div>
-        <div class="apple-progress mt-1.5">
-          <div class="bar purple" :style="{ width: analyzeProgress.total ? (analyzeProgress.current/analyzeProgress.total*100)+'%' : '100%' }"
-            :class="analyzeProgress.total ? '' : 'animate-pulse'"></div>
-        </div>
-      </div>
-      <div v-if="monitorError" class="apple-alert error mt-3 !text-xs">{{ monitorError }}</div>
+  <section v-if="activeTab==='thread'" class="tm-shell">
+    <div class="apple-card tm-form">
+      <div class="tm-heading"><h2>论点地图</h2><button type="button" class="tm-action" :disabled="!!threadBusy" @click="readExample">用示例帖看图 ↗</button></div>
+      <form @submit.prevent="loadThread(true)">
+        <label class="sr-only" for="thread-input">帖子链接或 ID</label>
+        <input id="thread-input" v-model="threadInput" placeholder="粘贴虎扑帖子链接或九位 ID" class="apple-input" required>
+        <button type="submit" class="apple-btn apple-btn-primary" :disabled="!!threadBusy || !threadInput.trim()">读整帖，聊两句</button>
+        <button type="button" class="apple-btn apple-btn-gray" :disabled="!!threadBusy || !threadInput.trim()" @click="loadThread(false)">只看图表与原文</button>
+      </form>
+      <p class="tm-meta">长帖会分批交给 AI，先解读第一条热评。图片和视频按配文理解。</p>
+      <p v-if="threadBusy" role="status" class="text-sm mt-2">{{ threadBusy }}</p>
+      <p v-if="threadError" role="alert" class="apple-alert error mt-2">{{ threadError }}</p>
     </div>
 
-    <!-- Stats cards -->
-    <div v-if="monitorStats" class="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-      <div class="apple-stat animate-card">
-        <div class="stat-value">{{ fetchDays === 1 ? todayStats.posts : rangeStats.posts }}</div>
-        <div class="stat-label">{{ fetchDays === 1 ? '今日帖子' : fetchDays + ' 日帖子' }}</div>
-      </div>
-      <div class="apple-stat animate-card">
-        <div class="stat-value">{{ fetchDays === 1 ? todayStats.replies : rangeStats.replies }}</div>
-        <div class="stat-label">{{ fetchDays === 1 ? '今日热评' : fetchDays + ' 日热评' }}</div>
-      </div>
-      <div class="apple-stat animate-card">
-        <div class="stat-value" style="color: var(--green)">{{ sentimentData ? sentimentData.positive || 0 : '-' }}</div>
-        <div class="stat-label"><span class="section-dot green"></span> 正面</div>
-      </div>
-      <div class="apple-stat animate-card">
-        <div class="stat-value" style="color: var(--orange)">{{ sentimentData ? sentimentData.neutral || 0 : '-' }}</div>
-        <div class="stat-label"><span class="section-dot orange"></span> 中性</div>
-      </div>
-      <div class="apple-stat animate-card">
-        <div class="stat-value" style="color: var(--red)">{{ sentimentData ? sentimentData.negative || 0 : '-' }}</div>
-        <div class="stat-label"><span class="section-dot red"></span> 负面</div>
-      </div>
-    </div>
+    <template v-if="threadData">
+      <header class="tm-title">
+        <h3><a :href="threadData.sources[0].url" target="_blank" rel="noopener noreferrer">{{ threadData.title }} ↗</a></h3>
+        <p>楼主 {{ threadData.sources[0].author || '匿名' }} <span>·</span> {{ threadData.pages }} 页 <span>·</span> {{ threadData.floor_count.toLocaleString() }} 条楼层记录 <span>·</span> {{ hotComments.length }} 条热评</p>
+        <p v-if="threadData.floor_count!==threadData.total_replies">站方显示 {{ threadData.total_replies }} 条回复，图表使用本次实际读取的数据。</p>
+      </header>
 
-    <!-- Charts row -->
-    <div v-if="monitorStats" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="apple-card p-5 animate-card">
-        <h3 class="card-title mb-4"><span class="section-dot green"></span> 情感倾向分布</h3>
-        <div class="h-56">
-          <canvas id="monitor-sentiment-chart"></canvas>
-        </div>
-      </div>
-      <div class="apple-card p-5 animate-card">
-        <h3 class="card-title mb-4"><span class="section-dot blue"></span> 每日帖子趋势（7 天）</h3>
-        <div class="h-56">
-          <canvas id="monitor-daily-chart"></canvas>
-        </div>
-      </div>
-    </div>
+      <div class="tm-overview">
+        <article class="apple-card tm-panel">
+          <div class="tm-heading"><div><h4>哪条热评带起了讨论？</h4><p>按引用链中的回复数排序 · 最多显示六条</p></div></div>
+          <div v-if="rank.length" class="tm-rank">
+            <button v-for="r in rank" :key="r.source.id" class="tm-rank-row" :aria-pressed="selectedHot===r.source.id"
+                :title="(threadData.hot_points[r.source.id] || r.source.text)+' · 直接 '+r.direct+' 条，后续 '+(r.total-r.direct)+' 条'"
+                @click="selectedHot=r.source.id">
+              <span class="tm-rank-label">{{ threadData.hot_points[r.source.id] || r.source.text || r.source.author || '无文字' }}</span>
+              <span class="tm-rank-track"><i class="tm-direct" :style="{width:(100*r.direct/(rank[0].total||1))+'%'}"></i><i class="tm-indirect" :style="{width:(100*(r.total-r.direct)/(rank[0].total||1))+'%'}"></i></span>
+              <b>{{ r.total }}</b>
+            </button>
+          </div>
+          <p v-else class="tm-empty">这篇帖子还没有站方热评。</p>
+          <div v-if="rank.length" class="tm-key"><span><i class="tm-direct"></i>直接回复</span><span><i class="tm-indirect"></i>后续接话</span><small>不同热评的分支可能重叠</small></div>
+        </article>
 
-    <!-- Brand & Model charts -->
-    <div v-if="aiJson" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div v-if="brandData.length" class="apple-card p-5 animate-card">
-        <h3 class="card-title mb-4"><span class="section-dot blue"></span> 品牌热议榜</h3>
-        <div class="h-72">
-          <canvas id="monitor-brand-chart"></canvas>
-        </div>
-        <div class="flex gap-4 mt-3 text-xs font-medium" style="color: var(--text-secondary)">
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background: var(--green)"></span> 正面</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background: var(--red)"></span> 负面</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background: var(--orange)"></span> 争议</span>
-        </div>
-      </div>
-      <div v-if="modelData.length" class="apple-card p-5 animate-card">
-        <h3 class="card-title mb-4"><span class="section-dot purple"></span> 车型好评率</h3>
-        <div class="h-72">
-          <canvas id="monitor-model-chart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Keywords -->
-    <div v-if="keywordsData.length" class="apple-card p-5 animate-card">
-      <h3 class="card-title mb-4"><span class="section-dot orange"></span> 热词风向</h3>
-      <div class="flex flex-wrap gap-2">
-        <span v-for="(kw, i) in keywordsData" :key="i"
-          class="apple-chip !py-1.5 !px-3 cursor-default transition-transform hover:scale-105"
-          :style="{ fontSize: (0.95 - i * 0.02) + 'rem' }">
-          {{ kw }}
-        </span>
-      </div>
-    </div>
-
-    <!-- AI summary -->
-    <div v-if="latestSnapshot && latestSnapshot.ai_summary" class="apple-card overflow-hidden animate-card">
-      <div class="px-6 py-4 border-b flex items-center gap-2.5" style="border-color: var(--separator); background: var(--surface-secondary)">
-        <div class="apple-logo w-7 h-7 text-[11px]">AI</div>
-        <h3 class="text-[15px] font-bold" style="color: var(--text-primary)">舆情分析报告</h3>
-        <span class="text-xs font-normal tabular" style="color: var(--text-tertiary)">{{ latestSnapshot.snapshot_date }}</span>
-      </div>
-      <div class="p-6">
-        <div class="ai-report" v-html="renderMarkdown(latestSnapshot.ai_summary)"></div>
-      </div>
-    </div>
-
-    <!-- Hot posts cards -->
-    <div v-if="monitorPosts.length" class="apple-card p-5 animate-card">
-      <h3 class="card-title mb-4">
-        <span class="section-dot red"></span> 热帖榜
-        <span class="text-xs font-normal" style="color: var(--text-tertiary)">{{ monitorPosts.length }} 条</span>
-      </h3>
-      <div class="space-y-1">
-        <div v-for="(p, i) in monitorPosts.slice(0, 20)" :key="p.tid" class="apple-row group">
-          <span class="text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full shrink-0 tabular"
-            :style="i < 3 ? 'background: var(--red-tint); color: var(--red)' : 'background: var(--fill); color: var(--text-tertiary)'">{{ i + 1 }}</span>
-          <div class="flex-1 min-w-0">
-            <a :href="'https://bbs.hupu.com/' + p.tid + '.html'" target="_blank"
-              class="text-sm line-clamp-1 font-medium transition-colors hover:underline" style="color: var(--text-primary)">
-              {{ p.title }}
-            </a>
-            <div class="flex items-center gap-3 mt-1 text-xs" style="color: var(--text-tertiary)">
-              <span class="font-medium">{{ p.author || '匿名' }}</span>
-              <span class="tabular">{{ fmtTime(p.create_time) }}</span>
+        <article class="apple-card tm-panel">
+          <div class="tm-heading"><div><h4>楼层热度</h4><p>按虎扑原帖页码分组</p></div>
+            <div class="tm-switch"><button @click="bandMetric='lights'" :aria-pressed="bandMetric==='lights'">获亮</button><button @click="bandMetric='quotes'" :aria-pressed="bandMetric==='quotes'">带引用的回复</button></div>
+          </div>
+          <template v-if="chosenBand && threadData.floor_count">
+            <div class="tm-band-readout"><strong>{{ chosenBand[bandMetric].toLocaleString() }}</strong><span>{{ bandMetric==='lights'?'次点亮':'条带引用的回复' }} · 第 {{ chosenBand.start===chosenBand.end ? chosenBand.start : chosenBand.start+'–'+chosenBand.end }} 页</span></div>
+            <div class="tm-histogram" aria-label="楼层热度柱状图">
+              <button v-for="(b,i) in bands" :key="b.start" @click="activeBand=i" :aria-pressed="bandIndex===i" :title="'第 '+b.start+'–'+b.end+' 页，'+b[bandMetric]+(bandMetric==='lights'?' 亮':' 条带引用的回复')" :aria-label="'查看第 '+b.start+' 到 '+b.end+' 页'">
+                <i :style="{height: b[bandMetric] ? Math.max(2,100*b[bandMetric]/maxBand)+'%' : '0'}"></i>
+              </button>
             </div>
-          </div>
-          <div class="flex items-center gap-2 text-xs shrink-0 tabular">
-            <span class="apple-chip" title="回复数">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-              {{ p.reply_count }}
-            </span>
-            <span class="apple-chip orange" title="亮了">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
-              {{ p.light_count }}
-            </span>
+            <div class="tm-axis"><span>第 1 页</span><span v-if="threadData.pages>1">第 {{ threadData.pages }} 页</span></div>
+            <p class="tm-meta tm-peak" v-if="chosenBand.top">区间最高亮 <a :href="chosenBand.top.url" target="_blank" rel="noopener noreferrer">{{ chosenBand.top.text || '查看原帖' }} ↗</a></p>
+          </template>
+          <p v-else class="tm-empty">还没有可绘制的普通楼层。</p>
+        </article>
+      </div>
+
+      <section v-if="hotRoot" class="tm-branch">
+        <div class="tm-branch-head">
+          <div><h3>热评的回复分支</h3><p class="tm-root-text">{{ threadData.hot_points[selectedHot] || hotRoot.text || '这条热评没有可读文字。' }}</p><a class="tm-meta underline" :href="hotRoot.url" target="_blank" rel="noopener noreferrer">{{ hotRoot.author || '匿名' }} · {{ hotRoot.lights ?? '—' }} 亮 · 热评原文 ↗</a></div>
+          <div class="tm-picker"><label for="tm-hot-picker">选择热评</label>
+            <select id="tm-hot-picker" v-model="selectedHot" class="apple-select"><option v-for="h in hotComments" :key="h.id" :value="h.id">{{ h.author || '匿名' }} · {{ (threadData.hot_points[h.id] || h.text || '原文').slice(0,40) }}</option></select>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Hot replies -->
-    <div v-if="monitorReplies.length" class="apple-card p-5 animate-card">
-      <h3 class="card-title mb-4">
-        <span class="section-dot orange"></span> 热评榜
-        <span class="text-xs font-normal" style="color: var(--text-tertiary)">{{ monitorReplies.length }} 条</span>
-      </h3>
-      <div class="space-y-1">
-        <div v-for="(r, i) in monitorReplies.slice(0, 20)" :key="r.pid" class="apple-row !items-start">
-          <span class="text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full shrink-0 mt-0.5 tabular"
-            :style="i < 3 ? 'background: var(--orange-tint); color: var(--orange)' : 'background: var(--fill); color: var(--text-tertiary)'">{{ i + 1 }}</span>
-          <div class="flex-1 min-w-0">
-            <a :href="'https://bbs.hupu.com/' + r.tid + '.html'" target="_blank"
-              class="text-sm leading-relaxed line-clamp-3 transition-colors block hover:underline" style="color: var(--text-primary)">
-              {{ r.content }}
-            </a>
-            <div class="flex items-center gap-3 mt-1.5 text-xs" style="color: var(--text-tertiary)">
-              <span class="font-medium">{{ r.username || '匿名' }}</span>
-              <span v-if="r.light_count > 0" class="apple-chip orange !py-0.5 tabular">
-                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                {{ r.light_count }}
-              </span>
-              <a :href="'https://bbs.hupu.com/' + r.tid + '.html'" target="_blank"
-                class="ml-auto text-xs hover:underline" style="color: var(--text-quaternary)">
-                查看原帖 →
-              </a>
+        <div class="tm-visual-pair">
+          <article class="apple-card tm-panel tm-map-panel">
+            <reply-network :root="hotRoot" :children-index="children" :positions="positions" :sources="threadSources"
+              :target="stanceTarget" :filter="stanceFilter" :dark="darkMode" :color-for="stanceColor" @inspect="inspected=$event"></reply-network>
+            <div v-if="inspectedSource" class="tm-inspector">
+              <div class="tm-heading"><b>{{ inspectedSource.id===selectedHot ? '选中的热评' : '选中的回复' }}</b>
+                <button class="tm-action" @click="inspected=''">收起</button></div>
+              <p v-if="positions[inspected]" class="tm-meta">对热评：{{ stanceName(positions[inspected].root) }} · 对上文：{{ stanceName(positions[inspected].parent) }}</p>
+              <thread-source :source="inspectedSource"></thread-source>
             </div>
-          </div>
+          </article>
+          <article class="apple-card tm-panel">
+            <div class="tm-heading"><h4>立场分布</h4><div class="tm-switch"><button @click="stanceTarget='root'" :aria-pressed="stanceTarget==='root'">对热评</button><button @click="stanceTarget='parent'" :aria-pressed="stanceTarget==='parent'">对上文</button></div></div>
+            <div class="tm-donut-wrap"><div class="tm-donut" role="img" :aria-label="'立场分布，已解读 '+classifiedCount+' 条，共 '+branchRows.length+' 条'" :style="{background:donut}" @click="clickDonut">
+              <div class="tm-donut-core"><strong>{{ classifiedCount }}</strong><span>/ {{ branchRows.length }} 条已解读</span></div>
+            </div></div>
+            <div class="tm-legend"><button v-for="c in stanceCounts" :key="c.id" :aria-pressed="stanceFilter===c.id" :disabled="!c.count" @click="selectStance(c.id)">
+              <i :style="{background:c.color}"></i><span>{{ c.label }}</span><b>{{ c.count }}</b></button></div>
+            <p class="tm-meta mt-3">按回帖条数统计。点颜色可筛选对应发言。</p>
+            <button v-if="classifiedCount < branchRows.length" type="button" class="apple-btn apple-btn-tinted mt-3" :disabled="branchBusy" @click="readBranch">{{ branchBusy?'正在解读…':(classifiedCount?'继续解读':'解读这条分支的立场') }}</button>
+            <p v-if="branchError" class="apple-alert error mt-2" role="alert">{{ branchError }}</p>
+          </article>
         </div>
-      </div>
-    </div>
 
-    <!-- Empty state for monitor -->
-    <div v-if="!monitorLoading && !monitorStats && !monitorError" class="text-center py-24">
-      <div class="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center" style="background: var(--fill)">
-        <svg class="w-8 h-8" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-        </svg>
-      </div>
-      <p class="text-sm font-medium" style="color: var(--text-secondary)">输入板块 ID，点击「抓取数据」开始舆论监控</p>
-      <p class="text-xs mt-1.5" style="color: var(--text-quaternary)">支持任意虎扑板块，如 278（汽车区）、34（步行街）、82（NBA）</p>
-    </div>
-  </div>
+        <details class="apple-card tm-details" :open="showRows" @toggle="showRows=$event.target.open">
+          <summary>分支回复与原文 <span>{{ stanceFilter ? stanceName(stanceFilter) : '全部' }} · {{ stanceFilter ? (stanceCounts.find(c=>c.id===stanceFilter)?.count||0) : branchRows.length }} 条</span></summary>
+          <button v-if="stanceFilter" class="tm-action mt-2" @click="stanceFilter=''">清除筛选</button>
+          <div v-for="row in visibleBranch" :key="row.source.id" class="thread-branch-row" :style="{marginLeft:Math.min(row.depth-1,4)*8+'px',borderColor:stanceColor(positions[row.source.id]?.[stanceTarget])}">
+            <p class="text-sm font-semibold">{{ row.source.author || '匿名' }} → {{ threadSources.get(row.parent).author || '匿名' }} <span class="tm-meta">{{ row.depth===1?'直接回复':'第 '+row.depth+' 层引用' }}</span></p>
+            <p class="text-sm mt-1 whitespace-pre-wrap break-words">{{ row.source.text || '无可读文字' }}</p>
+            <details class="tm-meta mt-1"><summary>{{ positions[row.source.id] ? '对热评：'+stanceName(positions[row.source.id].root)+' · 对上文：'+stanceName(positions[row.source.id].parent) : '查看引用上文' }}</summary>
+              <p v-if="positions[row.source.id]">{{ positions[row.source.id].why }}</p><thread-source :source="row.source"></thread-source>
+            </details>
+          </div>
+          <p v-if="!visibleBranch.length" class="tm-empty">这一组还没有回复。</p>
+          <div v-if="branchPages>1" class="flex items-center gap-3 text-sm mt-3"><button class="tm-action" @click="branchPage--" :disabled="branchPage===1">上一组</button>{{ branchPage }} / {{ branchPages }}<button class="tm-action" @click="branchPage++" :disabled="branchPage>=branchPages">下一组</button></div>
+        </details>
+      </section>
 
-  <!-- ── 懂哥履历 ── -->
+      <article v-if="threadData.review" class="apple-card tm-panel">
+        <h4>读完这栋楼</h4><p class="mt-2 leading-relaxed">{{ threadData.review.verdict.text }}</p>
+        <details class="mt-2"><summary class="tm-meta">展开整帖点评与依据</summary>
+          <p class="mt-3">{{ threadData.review.opening }}</p>
+          <div v-for="(note,i) in [...threadData.review.talk,threadData.review.verdict]" :key="i" class="mt-3">
+            <p v-if="i<threadData.review.talk.length">{{ note.text }}</p>
+            <details v-if="note.sources.length"><summary class="tm-meta">查看{{ i===threadData.review.talk.length ? '短评' : '本段' }}依据</summary><thread-source v-for="id in note.sources" :key="id" :source="threadSources.get(id)" class="mt-2"></thread-source></details>
+          </div>
+        </details>
+      </article>
+      <details class="apple-card tm-details"><summary>楼主原文与附件</summary><thread-source :source="threadData.sources[0]" class="mt-3"></thread-source></details>
+      <details v-if="floorPages" class="apple-card tm-details"><summary>翻楼看原文 <span>{{ threadData.sources.length-1 }} 条</span></summary>
+        <thread-source v-for="s in visibleFloors" :key="s.id" :source="s" class="mt-4 border-t pt-3" style="border-color:var(--separator)"></thread-source>
+        <div v-if="floorPages>1" class="flex items-center gap-3 mt-4 text-sm"><button class="tm-action" @click="threadPage--" :disabled="threadPage===1">上一组</button>{{ threadPage }} / {{ floorPages }}<button class="tm-action" @click="threadPage++" :disabled="threadPage>=floorPages">下一组</button></div>
+      </details>
+    </template>
+  </section>
+
   <section v-if="activeTab==='history'" class="max-w-5xl mx-auto px-4 pt-4 pb-12 space-y-5">
     <div class="apple-card p-5">
       <div class="flex items-center gap-2"><span class="section-dot orange"></span><h2 class="font-semibold text-lg">懂哥履历</h2></div>
@@ -1761,7 +1656,7 @@
   </div>
 
   <!-- ── Empty State ── -->
-  <div v-if="activeTab!=='monitor' && activeTab!=='ghost' && activeTab!=='graph' && !monitorLoading && !loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
+  <div v-if="activeTab!=='ghost' && activeTab!=='graph' && !loading && !postLoading && !qaLoading && ((activeTab==='replies' && !stats) || (activeTab==='posts' && !postsData.length) || (activeTab==='qa' && !qaHistory.length && !qaUsername)) && !error"
     class="max-w-6xl mx-auto px-4 mt-28 text-center">
     <div class="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center" style="background: var(--fill)">
       <svg class="w-8 h-8" style="color: var(--text-tertiary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">

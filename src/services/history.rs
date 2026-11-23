@@ -605,12 +605,12 @@ pub async fn generate(
 }
 
 // Never expose the upstream response body, user text or credentials in API errors.
-fn safe_ai_error(error: anyhow::Error) -> anyhow::Error {
+pub(crate) fn safe_ai_error(error: anyhow::Error) -> anyhow::Error {
     if let Some(output) = error.downcast_ref::<crate::deepseek::LlmOutputError>() {
         return anyhow::anyhow!(match output {
             crate::deepseek::LlmOutputError::Empty => "AI 两次均返回空正文，请稍后重试或切换模型",
             crate::deepseek::LlmOutputError::OutputLimit =>
-                "AI 输出过长，未生成完整履历，请缩小日期范围后重试",
+                "AI 输出过长，未生成完整报告，请重试",
         });
     }
     let message = if let Some(http) = error.downcast_ref::<crate::deepseek::LlmHttpError>() {

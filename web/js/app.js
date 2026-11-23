@@ -9,8 +9,9 @@ import { setupFetchSection } from './components/FetchSection.js';
 import { setupRepliesTab } from './components/RepliesTab.js';
 import { setupPostsTab } from './components/PostsTab.js';
 import { setupQaTab } from './components/QaTab.js';
-import { setupMonitorTab } from './components/MonitorTab.js';
 import { setupGhostTab } from './components/GhostTab.js';
+import { ReplyNetwork } from './components/ThreadCharts.js';
+import { setupThreadOpinionsTab, ThreadSource } from './components/ThreadOpinionsTab.js';
 import { setupHistoryTab } from './components/HistoryTab.js';
 import { setupInteractionGraphTab } from './components/InteractionGraphTab.js';
 import * as api from './utils/api.js';
@@ -22,6 +23,7 @@ createApp({
   setup() {
     // ── Create store (shared reactive state) ──
     const store = createStore();
+    if (window.location.hash === '#thread') store.activeTab.value = 'thread';
 
     // ── Setup components ──
     const charts = setupCharts(store);
@@ -31,8 +33,8 @@ createApp({
     const replies = setupRepliesTab(store, charts, { api });
     const posts = setupPostsTab(store, charts);
     const qa = setupQaTab(store);
-    const monitor = setupMonitorTab(store);
     const ghost = setupGhostTab(store);
+    const threadTab = setupThreadOpinionsTab(store);
     const historyTab = setupHistoryTab(store);
     const graphTab = setupInteractionGraphTab(store);
 
@@ -46,12 +48,6 @@ createApp({
       }
       if (store.postsData.value.length) {
         charts.renderPostTopicChart();
-      }
-      if (monitor.monitorStats.value) {
-        monitor.renderSentimentChart();
-        monitor.renderDailyChart();
-        monitor.renderBrandChart();
-        monitor.renderModelChart();
       }
       if (store.graphData.value) {
         graphTab.renderGraph();
@@ -67,11 +63,6 @@ createApp({
         charts.renderDetailedCharts();
       } else if (newTab === 'posts' && store.postsData.value.length) {
         charts.renderPostTopicChart();
-      } else if (newTab === 'monitor' && monitor.monitorStats.value) {
-        monitor.renderSentimentChart();
-        monitor.renderDailyChart();
-        monitor.renderBrandChart();
-        monitor.renderModelChart();
       } else if (newTab === 'graph' && store.graphData.value) {
         graphTab.renderGraph();
       }
@@ -202,9 +193,9 @@ createApp({
       ...replies,
       ...posts,
       ...qa,
-      ...monitor,
       ...ghost,
       ...historyTab,
+      ...threadTab,
       ...graphTab,
       ...fetchSection,
       saveConfig, skipAiKeySetup, checkConfigStatus,
@@ -212,4 +203,4 @@ createApp({
       fmtTokens, renderMarkdown,
     };
   }
-}).mount('#app');
+}).component('reply-network', ReplyNetwork).component('thread-source', ThreadSource).mount('#app');

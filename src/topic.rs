@@ -1,3 +1,5 @@
+pub mod full;
+
 use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -48,20 +50,20 @@ pub struct PostReply {
 // ============ JSON 解析结构 ============
 
 #[derive(Debug, Deserialize)]
-struct NextData {
-    props: Props,
+struct NextData<T> {
+    props: Props<T>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Props {
-    page_props: PageProps,
+struct Props<T> {
+    page_props: PageProps<T>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PageProps {
-    detail: Option<Detail>,
+struct PageProps<T> {
+    detail: Option<T>,
     detail_error_info: Option<DetailError>,
 }
 
@@ -85,8 +87,6 @@ struct Thread {
     tid: String,
     title: String,
     content: String,
-    #[serde(default)]
-    create_time: Option<String>,
     lights: Option<i32>,
     replies: Option<i32>,
     author: Option<Author>,
@@ -195,62 +195,6 @@ fn parse_post_list(html: &str, limit: usize) -> Vec<Post> {
     posts
 }
 
-/// 一次性获取帖子详情 + 热门回复（合并请求，避免重复 HTTP 调用）
-pub async fn fetch_post_combined(client: &HupuClient, tid: &str, reply_limit: usize) -> Result<(PostDetail, Vec<PostReply>)> {
-    let data = fetch_post_data(client, tid).await?;
-
-    if let Some(err) = &data.props.page_props.detail_error_info {
-        if err.code != 200 {
-            anyhow::bail!("帖子访问失败: {} (code: {})", err.message, err.code);
-        }
-    }
-
-    let detail_info = data
-        .props
-        .page_props
-        .detail
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("帖子不存在或无法访问"))?;
-
-    let thread = detail_info.thread.as_ref()
-        .ok_or_else(|| anyhow::anyhow!("帖子不存在或已被删除"))?;
-
-    let author_name = thread
-        .author
-        .as_ref()
-        .and_then(|a| a.puname.as_ref())
-        .cloned()
-        .unwrap_or_default();
-
-    let create_time = thread.create_time.clone(); // "2025-06-02T20:30:00.000+08:00" or similar
-
-    let detail = PostDetail {
-        tid: thread.tid.clone(),
-        title: thread.title.clone(),
-        author: author_name,
-        content: strip_html(&decode_json_escapes(&thread.content)),
-        create_time,
-        reply_count: thread.replies,
-        light_count: thread.lights,
-    };
-
-    let replies: Vec<PostReply> = detail_info
-        .lights
-        .as_ref()
-        .map(|lights| {
-            lights.iter().take(reply_limit).map(|r| PostReply {
-                pid: r.pid.clone(),
-                username: r.author.as_ref().and_then(|a| a.puname.clone()).unwrap_or_default(),
-                content: strip_html(&decode_json_escapes(&r.content)),
-                light_count: r.all_light_count.unwrap_or(0),
-                create_time: r.created_at_format.clone(),
-            }).collect()
-        })
-        .unwrap_or_default();
-
-    Ok((detail, replies))
-}
-
 /// 获取帖子详情和热门回复
 pub async fn fetch_post_detail(client: &HupuClient, tid: &str) -> Result<PostDetail> {
     let data = fetch_post_data(client, tid).await?;
@@ -327,23 +271,16 @@ pub async fn fetch_post_replies(
 }
 
 /// 获取帖子页面 JSON 数据
-async fn fetch_post_data(client: &HupuClient, tid: &str) -> Result<NextData> {
-    let url = format!("https://bbs.hupu.com/{}.html", tid);
+async fn fetch_post_data(client: &HupuClient, tid: &str) -> Result<NextData<Detail>> {
+    fetch_post_page(client, tid, 1).await
+}
 
-    let text = client
-        .client
-        .get(&url)
-        .send()
-        .await?
-        .text()
-        .await?;
-
-    check_waf_block(&text)?;
-    // 查找 __NEXT_DATA__ 或 {"props":{"pageProps" 格式的 JSON
-    let json_str = extract_next_data(&text)?;
-
-    let data: NextData = serde_json::from_str(json_str)?;
-    Ok(data)
+async fn fetch_post_page<T: serde::de::DeserializeOwned>(client: &HupuClient, tid: &str, page: usize) -> Result<NextData<T>> {
+    let url = if page == 1 { format!("https://bbs.hupu.com/{tid}.html") }
+        else { format!("https://bbs.hupu.com/{tid}-{page}.html") };
+    let html = client.client.get(url).send().await?.error_for_status()?.text().await?;
+    check_waf_block(&html)?;
+    Ok(serde_json::from_str(extract_next_data(&html)?)?)
 }
 
 /// 从 HTML 中提取 __NEXT_DATA__ JSON

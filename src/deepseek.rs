@@ -982,12 +982,12 @@ fn json_content(choice: &Choice, strict: bool) -> Result<String> {
     Ok(content)
 }
 
-async fn call_llm_json(
-    client: &reqwest::Client, provider: &AiProvider, system_prompt: &str, user_prompt: &str,
-    history: bool, fallback: bool,
-) -> Result<DeepSeekResult> {
-    let request = json_request(provider, system_prompt, user_prompt, history, fallback);
+pub(crate) async fn call_thread_prose(client: &reqwest::Client, provider: &AiProvider, system: &str, prompt: &str) -> Result<String> {
+    let request = json_request(provider, system, prompt, true, true);
+    completion_text(client, provider, &request, true).await
+}
 
+async fn completion_text(client: &reqwest::Client, provider: &AiProvider, request: &LlmRequest, strict: bool) -> Result<String> {
     let resp = client
         .post(provider.base_url())
         .header("Authorization", format!("Bearer {}", provider.api_key()))
@@ -1012,7 +1012,16 @@ async fn call_llm_json(
     let choice = body.choices
         .first()
         .ok_or_else(|| anyhow::anyhow!("No choices in LLM response"))?;
-    let content = json_content(choice, history)?;
+    json_content(choice, strict)
+}
+
+async fn call_llm_json(
+    client: &reqwest::Client, provider: &AiProvider, system_prompt: &str, user_prompt: &str,
+    history: bool, fallback: bool,
+) -> Result<DeepSeekResult> {
+    let request = json_request(provider, system_prompt, user_prompt, history, fallback);
+
+    let content = completion_text(client, provider, &request, history).await?;
 
     // json_object mode should return valid JSON, but LLMs may still emit
     // unescaped control characters or truncate on token limits.

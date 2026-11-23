@@ -15,12 +15,6 @@ pub fn resolve_cookie(override_cookie: Option<&str>) -> Result<String, &'static 
     }
 }
 
-/// Check whether any cookie is available (user override or config), without extracting the value.
-pub fn has_cookie(override_cookie: Option<&str>) -> bool {
-    override_cookie.filter(|c| !c.is_empty()).is_some()
-        || crate::config::try_get().map(|c| !c.cookie.is_empty()).unwrap_or(false)
-}
-
 /// Resolve cookie and create a `HupuClient` in one step.
 pub fn create_hupu_client(override_cookie: Option<&str>) -> Result<HupuClient, String> {
     let cookie = resolve_cookie(override_cookie).map_err(|e| e.to_string())?;
